@@ -7,3 +7,9 @@ export type ConfigItem = {
 export type ProjectState = {
   configItems: ConfigItem[]
 }
+
+export type SpikeState = {
+  projectState: ProjectState
+  canUndo: boolean
+  canRedo: boolean
+}

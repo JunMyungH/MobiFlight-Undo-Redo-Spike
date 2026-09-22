@@ -35,7 +35,10 @@ var projectState = new ProjectState
     ]
 };
 
+var commandHistory = new CommandHistory();
+
 builder.Services.AddSingleton(projectState);
+builder.Services.AddSingleton(commandHistory);
 
 var app = builder.Build();
 
@@ -46,9 +49,104 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("Frontend");
 
-app.MapGet("/api/state", (ProjectState state) =>
+app.MapGet("/api/state", (ProjectState state, CommandHistory history) =>
 {
-    return Results.Ok(state);
+    return Results.Ok(
+        new
+        {
+            projectState = state,
+            canUndo = history.CanUndo,
+            canRedo = history.CanRedo
+        }
+    );
+});
+
+app.MapPost("/api/config-items/{id:guid}/toggle", (
+    Guid id,
+    ProjectState state,
+    CommandHistory history) =>
+{
+    var item = state.ConfigItems.FirstOrDefault(
+        item => item.Id == id);
+
+    if (item == null)
+    {
+        return Results.NotFound();
+    }
+
+    history.Execute(
+        new ToggleActiveCommand(item));
+
+    return Results.Ok(new
+    {
+        projectState = state,
+        canUndo = history.CanUndo,
+        canRedo = history.CanRedo
+    });
+});
+
+app.MapDelete("/api/config-items/{id:guid}", (
+    Guid id,
+    ProjectState state,
+    CommandHistory history) =>
+{
+    var itemExists = state.ConfigItems.Any(
+        item => item.Id == id);
+
+    if (!itemExists)
+    {
+        return Results.NotFound();
+    }
+
+    history.Execute(
+        new DeleteConfigItemCommand(state, id));
+
+    return Results.Ok(new
+    {
+        projectState = state,
+        canUndo = history.CanUndo,
+        canRedo = history.CanRedo
+    });
+});
+
+app.MapPost("/api/history/undo", (
+    ProjectState state,
+    CommandHistory history) =>
+{
+    if (!history.Undo())
+    {
+        return Results.Conflict(new
+        {
+            message = "Nothing to undo."
+        });
+    }
+
+    return Results.Ok(new
+    {
+        projectState = state,
+        canUndo = history.CanUndo,
+        canRedo = history.CanRedo
+    });
+});
+
+app.MapPost("/api/history/redo", (
+    ProjectState state,
+    CommandHistory history) =>
+{
+    if (!history.Redo())
+    {
+        return Results.Conflict(new
+        {
+            message = "Nothing to redo."
+        });
+    }
+
+    return Results.Ok(new
+    {
+        projectState = state,
+        canUndo = history.CanUndo,
+        canRedo = history.CanRedo
+    });
 });
 
 app.Run();
