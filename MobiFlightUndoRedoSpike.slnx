@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/UndoRedoSpike.Api/UndoRedoSpike.Api.csproj" />
     <Project Path="src/UndoRedoSpike/UndoRedoSpike.csproj" />
   </Folder>
   <Folder Name="/tests/">

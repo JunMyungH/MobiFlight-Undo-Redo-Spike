@@ -1,5 +1,7 @@
 # MobiFlight-Undo-Redo-Spike
-Repository for prototyping and comparing Undo/Redo approaches using C# and .NET.
+Repository for prototyping and comparing Undo/Redo approaches.
+
+This prototype should be a full-stack prototype, using React + Typescript and .NET, which would be used for evaluating Undo/Redo architectures for MobiFlight Connector.
 
 ## Goal
 Compare Undo/Redo mechanisms for MobiFlight.

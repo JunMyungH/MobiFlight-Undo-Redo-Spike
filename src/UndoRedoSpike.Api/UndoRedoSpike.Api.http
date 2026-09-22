@@ -1,0 +1,6 @@
+@UndoRedoSpike.Api_HostAddress = http://localhost:5094
+
+GET {{UndoRedoSpike.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
