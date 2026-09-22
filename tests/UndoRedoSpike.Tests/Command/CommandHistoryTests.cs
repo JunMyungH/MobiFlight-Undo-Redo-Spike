@@ -1,44 +1,49 @@
-[TestMethod]
-public void Undo_FollowsLifoOrder()
+[TestClass]
+public class CommandHistoryTests
 {
-    var first = new ConfigItem { Active = false };
-    var second = new ConfigItem { Active = false };
 
-    var history = new CommandHistory();
+    [TestMethod]
+    public void Undo_FollowsLifoOrder()
+    {
+        var first = new ConfigItem { Active = false };
+        var second = new ConfigItem { Active = false };
 
-    history.Execute(new ToggleActiveCommand(first));
-    history.Execute(new ToggleActiveCommand(second));
+        var history = new CommandHistory();
 
-    Assert.IsTrue(first.Active);
-    Assert.IsTrue(second.Active);
+        history.Execute(new ToggleActiveCommand(first));
+        history.Execute(new ToggleActiveCommand(second));
 
-    history.Undo();
+        Assert.IsTrue(first.Active);
+        Assert.IsTrue(second.Active);
 
-    Assert.IsTrue(first.Active);
-    Assert.IsFalse(second.Active);
+        history.Undo();
 
-    history.Undo();
+        Assert.IsTrue(first.Active);
+        Assert.IsFalse(second.Active);
 
-    Assert.IsFalse(first.Active);
-    Assert.IsFalse(second.Active);
-}
+        history.Undo();
 
-[TestMethod]
-public void NewActionAfterUndo_ClearsRedoStack()
-{
-    var first = new ConfigItem { Active = false };
-    var second = new ConfigItem { Active = false };
+        Assert.IsFalse(first.Active);
+        Assert.IsFalse(second.Active);
+    }
 
-    var history = new CommandHistory();
+    [TestMethod]
+    public void NewActionAfterUndo_ClearsRedoStack()
+    {
+        var first = new ConfigItem { Active = false };
+        var second = new ConfigItem { Active = false };
 
-    history.Execute(new ToggleActiveCommand(first));
+        var history = new CommandHistory();
 
-    history.Undo();
+        history.Execute(new ToggleActiveCommand(first));
 
-    Assert.IsTrue(history.CanRedo);
+        history.Undo();
 
-    history.Execute(new ToggleActiveCommand(second));
+        Assert.IsTrue(history.CanRedo);
 
-    Assert.IsFalse(history.CanRedo);
-    Assert.AreEqual(0, history.RedoCount);
+        history.Execute(new ToggleActiveCommand(second));
+
+        Assert.IsFalse(history.CanRedo);
+        Assert.AreEqual(0, history.RedoCount);
+    }
 }
