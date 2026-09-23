@@ -135,3 +135,90 @@ Further evaluation is required for:
 - side effects
 - frontend/backend synchronization
 - appropriate snapshot scope
+
+## Compound Edit Evaluation
+
+A compound edit was added to evaluate how each approach handles one semantic user action that changes multiple parts of the project state.
+
+The test action performs the following changes on one ConfigItem:
+
+- changes the Name
+- toggles the Active state
+- moves the ConfigItem to another collection position
+
+Although several state changes occur internally, the complete Apply operation must be represented as one Undo/Redo history entry.
+
+### Command Based
+
+The Command implementation uses a dedicated:
+
+`CompoundEditCommand`
+
+The command explicitly stores the information required to reverse and replay the complete operation:
+
+- previous Name
+- resulting Name
+- previous Active value
+- resulting Active value
+- previous collection index
+- resulting collection index
+- target item identity
+
+The History Inspector therefore contains one semantic entry:
+
+`CompoundEditCommand`
+
+Undo explicitly restores each stored property and the previous collection position.
+
+Redo explicitly reapplies the resulting property values and position.
+
+This keeps the history compact and semantically meaningful, but the amount of action-specific inverse logic increases as the operation becomes more complex.
+
+### Snapshot Based
+
+The Snapshot implementation performs the same compound mutation inside one SnapshotHistory operation.
+
+Before the mutation, the complete ProjectState is cloned.
+
+The mutation itself can then change multiple values without requiring any action-specific inverse implementation:
+
+- Name
+- Active
+- collection position
+
+The History Inspector contains one entry:
+
+`ProjectState snapshot (N ConfigItems)`
+
+Undo restores the previous ProjectState generically.
+
+Redo restores the resulting ProjectState generically.
+
+The Undo/Redo mechanism itself does not become more complex when more properties are included in the compound operation.
+
+However, the complete configured snapshot scope is stored even though only one ConfigItem is modified.
+
+### Comparison
+
+| Criterion | Command | Snapshot |
+| --- | --- | --- |
+| History entries per compound Apply | 1 | 1 |
+| Semantic history | `CompoundEditCommand` | Generic ProjectState snapshot |
+| Property-specific inverse logic | Required | Not required |
+| Collection position handling | Explicitly stored | Included in snapshot |
+| Complexity when more fields change | Command implementation grows | Undo mechanism unchanged |
+| Stored state | Data required by the action | Entire snapshot scope |
+| Object reference restoration | Can preserve original object | Current clone implementation creates new objects |
+| Dependence on project size | Low for this command | Snapshot size grows with project size |
+
+### Finding
+
+The compound-edit experiment exposes a trade-off that was not visible as clearly in the simple Toggle experiment.
+
+For small localized changes, the Command approach can store only the minimal information required to reverse the operation.
+
+For compound changes, however, the Command implementation must explicitly model every part of the inverse operation.
+
+The Snapshot approach has a higher state-copying cost, but the Undo mechanism remains unchanged regardless of how many properties or collection changes are included in the transaction.
+
+This suggests that the suitability of an Undo/Redo representation may depend on the mutation pattern rather than only on whether the approach can technically support Undo and Redo.

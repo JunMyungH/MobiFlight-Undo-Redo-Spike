@@ -169,6 +169,27 @@ commandApi.MapPost(
         });
     });
 
+commandApi.MapPost(
+    "/experiment/compound-edit",
+    (CommandSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+
+        var item =
+            service.Project.ConfigItems[0];
+
+        service.History.Execute(
+            new CompoundEditCommand(
+                service.Project,
+                item.Id));
+
+        return Results.Ok(
+            CreateCommandResponse(service));
+    });
+
 var snapshotApi = app.MapGroup("/api/snapshot");
 
 snapshotApi.MapGet("/state", (
@@ -325,6 +346,36 @@ snapshotApi.MapPost(
                     stopwatch.Elapsed.TotalMilliseconds
             }
         });
+    });
+
+snapshotApi.MapPost(
+    "/experiment/compound-edit",
+    (SnapshotSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+
+        service.History.Execute(
+            service.Project,
+            project =>
+            {
+                var item =
+                    project.ConfigItems[0];
+
+                item.Name =
+                    $"{item.Name} (Edited)";
+
+                item.Active =
+                    !item.Active;
+
+                project.ConfigItems.RemoveAt(0);
+                project.ConfigItems.Add(item);
+            });
+
+        return Results.Ok(
+            CreateSnapshotResponse(service));
     });
 
 static object CreateCommandResponse(

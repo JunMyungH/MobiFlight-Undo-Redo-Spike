@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import {
+  compoundEdit,
   deleteItem,
   getState,
   redo,
@@ -146,6 +147,22 @@ function UndoRedoDemo({
           }
         >
           Reset 3 Items
+        </button>
+
+        {' '}
+
+        <button
+          disabled={
+            pending ||
+            state.projectState.configItems.length === 0
+          }
+          onClick={() =>
+            runAction(() =>
+              compoundEdit(approach),
+            )
+          }
+        >
+          Apply Compound Edit
         </button>
 
         {' '}

@@ -102,3 +102,13 @@ export async function runToggleExperiment(
 
   return response.json()
 }
+
+export function compoundEdit(
+  approach: Approach,
+) {
+  return request(
+    approach,
+    '/experiment/compound-edit',
+    'POST',
+  )
+}
