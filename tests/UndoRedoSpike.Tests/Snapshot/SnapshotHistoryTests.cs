@@ -84,11 +84,11 @@ public class SnapshotHistoryTests
                 item => item.Id == deletedId);
         });
 
-        Assert.AreEqual(2, project.ConfigItems.Count);
+        Assert.HasCount(2, project.ConfigItems);
 
         history.Undo(project);
 
-        Assert.AreEqual(3, project.ConfigItems.Count);
+        Assert.HasCount(3, project.ConfigItems);
         Assert.AreEqual(
             deletedId,
             project.ConfigItems[1].Id);

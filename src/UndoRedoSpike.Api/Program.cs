@@ -49,19 +49,21 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("Frontend");
 
-app.MapGet("/api/state", (ProjectState state, CommandHistory history) =>
+var commandApi = app.MapGroup("/api/command");
+
+commandApi.MapGet("/state", (
+    ProjectState state,
+    CommandHistory history) =>
 {
-    return Results.Ok(
-        new
-        {
-            projectState = state,
-            canUndo = history.CanUndo,
-            canRedo = history.CanRedo
-        }
-    );
+    return Results.Ok(new
+    {
+        projectState = state,
+        canUndo = history.CanUndo,
+        canRedo = history.CanRedo
+    });
 });
 
-app.MapPost("/api/config-items/{id:guid}/toggle", (
+commandApi.MapPost("/config-items/{id:guid}/toggle", (
     Guid id,
     ProjectState state,
     CommandHistory history) =>
@@ -69,7 +71,7 @@ app.MapPost("/api/config-items/{id:guid}/toggle", (
     var item = state.ConfigItems.FirstOrDefault(
         item => item.Id == id);
 
-    if (item == null)
+    if (item is null)
     {
         return Results.NotFound();
     }
@@ -85,7 +87,7 @@ app.MapPost("/api/config-items/{id:guid}/toggle", (
     });
 });
 
-app.MapDelete("/api/config-items/{id:guid}", (
+commandApi.MapDelete("/config-items/{id:guid}", (
     Guid id,
     ProjectState state,
     CommandHistory history) =>
@@ -109,7 +111,7 @@ app.MapDelete("/api/config-items/{id:guid}", (
     });
 });
 
-app.MapPost("/api/history/undo", (
+commandApi.MapPost("/history/undo", (
     ProjectState state,
     CommandHistory history) =>
 {
@@ -129,7 +131,7 @@ app.MapPost("/api/history/undo", (
     });
 });
 
-app.MapPost("/api/history/redo", (
+commandApi.MapPost("/history/redo", (
     ProjectState state,
     CommandHistory history) =>
 {
