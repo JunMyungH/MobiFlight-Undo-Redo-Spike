@@ -2,6 +2,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Frontend", policy =>
@@ -39,6 +40,8 @@ var commandHistory = new CommandHistory();
 
 builder.Services.AddSingleton(projectState);
 builder.Services.AddSingleton(commandHistory);
+
+builder.Services.AddSingleton<SnapshotSpikeService>();
 
 var app = builder.Build();
 
@@ -150,5 +153,124 @@ commandApi.MapPost("/history/redo", (
         canRedo = history.CanRedo
     });
 });
+
+
+var snapshotApi = app.MapGroup("/api/snapshot");
+
+snapshotApi.MapGet("/state", (
+    SnapshotSpikeService service) =>
+{
+    return Results.Ok(new
+    {
+        projectState = service.Project,
+        canUndo = service.History.CanUndo,
+        canRedo = service.History.CanRedo
+    });
+});
+
+snapshotApi.MapPost(
+    "/config-items/{id:guid}/toggle",
+    (
+        Guid id,
+        SnapshotSpikeService service) =>
+    {
+        var itemExists =
+            service.Project.ConfigItems.Any(
+                item => item.Id == id);
+
+        if (!itemExists)
+        {
+            return Results.NotFound();
+        }
+
+        service.History.Execute(
+            service.Project,
+            project =>
+            {
+                var item =
+                    project.ConfigItems.First(
+                        item => item.Id == id);
+
+                item.Active = !item.Active;
+            });
+
+        return Results.Ok(new
+        {
+            projectState = service.Project,
+            canUndo = service.History.CanUndo,
+            canRedo = service.History.CanRedo
+        });
+    });
+
+snapshotApi.MapDelete(
+    "/config-items/{id:guid}",
+    (
+        Guid id,
+        SnapshotSpikeService service) =>
+    {
+        var itemExists =
+            service.Project.ConfigItems.Any(
+                item => item.Id == id);
+
+        if (!itemExists)
+        {
+            return Results.NotFound();
+        }
+
+        service.History.Execute(
+            service.Project,
+            project =>
+            {
+                project.ConfigItems.RemoveAll(
+                    item => item.Id == id);
+            });
+
+        return Results.Ok(new
+        {
+            projectState = service.Project,
+            canUndo = service.History.CanUndo,
+            canRedo = service.History.CanRedo
+        });
+    });
+
+snapshotApi.MapPost(
+    "/history/undo",
+    (SnapshotSpikeService service) =>
+    {
+        if (!service.History.Undo(service.Project))
+        {
+            return Results.Conflict(new
+            {
+                message = "Nothing to undo."
+            });
+        }
+
+        return Results.Ok(new
+        {
+            projectState = service.Project,
+            canUndo = service.History.CanUndo,
+            canRedo = service.History.CanRedo
+        });
+    });
+
+snapshotApi.MapPost(
+    "/history/redo",
+    (SnapshotSpikeService service) =>
+    {
+        if (!service.History.Redo(service.Project))
+        {
+            return Results.Conflict(new
+            {
+                message = "Nothing to redo."
+            });
+        }
+
+        return Results.Ok(new
+        {
+            projectState = service.Project,
+            canUndo = service.History.CanUndo,
+            canRedo = service.History.CanRedo
+        });
+    });
 
 app.Run();
