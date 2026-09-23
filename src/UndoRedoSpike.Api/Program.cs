@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
@@ -14,32 +16,7 @@ builder.Services.AddCors(options =>
     });
 });
 
-var projectState = new ProjectState
-{
-    ConfigItems =
-    [
-        new ConfigItem
-        {
-            Name = "Landing Light",
-            Active = true
-        },
-        new ConfigItem
-        {
-            Name = "Gear Indicator",
-            Active = false
-        },
-        new ConfigItem
-        {
-            Name = "Flaps",
-            Active = true
-        }
-    ]
-};
-
-var commandHistory = new CommandHistory();
-
-builder.Services.AddSingleton(projectState);
-builder.Services.AddSingleton(commandHistory);
+builder.Services.AddSingleton<CommandSpikeService>();
 
 builder.Services.AddSingleton<SnapshotSpikeService>();
 
@@ -55,55 +32,56 @@ app.UseCors("Frontend");
 var commandApi = app.MapGroup("/api/command");
 
 commandApi.MapGet("/state", (
-    ProjectState state,
-    CommandHistory history) =>
+    CommandSpikeService service) =>
 {
-    return Results.Ok(CreateCommandResponse(state, history));
+    return Results.Ok(CreateCommandResponse(service));
 });
 
 commandApi.MapPost("/config-items/{id:guid}/toggle", (
     Guid id,
-    ProjectState state,
-    CommandHistory history) =>
+    CommandSpikeService service) =>
 {
-    var item = state.ConfigItems.FirstOrDefault(
-        item => item.Id == id);
+    var item = service.Project.ConfigItems
+            .FirstOrDefault(item => item.Id == id);
 
     if (item is null)
     {
         return Results.NotFound();
     }
 
-    history.Execute(
+    service.History.Execute(
         new ToggleActiveCommand(item));
 
-    return Results.Ok(CreateCommandResponse(state, history));
+    return Results.Ok(
+        CreateCommandResponse(service));
 });
 
 commandApi.MapDelete("/config-items/{id:guid}", (
     Guid id,
-    ProjectState state,
-    CommandHistory history) =>
+    CommandSpikeService service) =>
 {
-    var itemExists = state.ConfigItems.Any(
-        item => item.Id == id);
+    var exists =
+        service.Project.ConfigItems.Any(
+            item => item.Id == id);
 
-    if (!itemExists)
+    if (!exists)
     {
         return Results.NotFound();
     }
 
-    history.Execute(
-        new DeleteConfigItemCommand(state, id));
+    service.History.Execute(
+        new DeleteConfigItemCommand(
+            service.Project,
+            id));
 
-    return Results.Ok(CreateCommandResponse(state, history));
+    return Results.Ok(
+        CreateCommandResponse(service));
 });
 
 commandApi.MapPost("/history/undo", (
-    ProjectState state,
-    CommandHistory history) =>
+    CommandSpikeService service) =>
 {
-    if (!history.Undo())
+    if (!service.History.Undo())
     {
         return Results.Conflict(new
         {
@@ -111,14 +89,14 @@ commandApi.MapPost("/history/undo", (
         });
     }
 
-    return Results.Ok(CreateCommandResponse(state, history));
+    return Results.Ok(
+        CreateCommandResponse(service));
 });
 
 commandApi.MapPost("/history/redo", (
-    ProjectState state,
-    CommandHistory history) =>
+    CommandSpikeService service) =>
 {
-    if (!history.Redo())
+    if (!service.History.Redo())
     {
         return Results.Conflict(new
         {
@@ -126,9 +104,70 @@ commandApi.MapPost("/history/redo", (
         });
     }
 
-    return Results.Ok(CreateCommandResponse(state, history));
+    return Results.Ok(
+        CreateCommandResponse(service));
 });
 
+commandApi.MapPost(
+    "/experiment/reset/{itemCount:int}",
+    (
+        int itemCount,
+        CommandSpikeService service) =>
+    {
+        if (itemCount is < 1 or > 10000)
+        {
+            return Results.BadRequest();
+        }
+
+        service.Reset(itemCount);
+
+        return Results.Ok(
+            CreateCommandResponse(service));
+    });
+
+commandApi.MapPost(
+    "/experiment/toggles/{count:int}",
+    (
+        int count,
+        CommandSpikeService service) =>
+    {
+        if (count is < 1 or > 10000)
+        {
+            return Results.BadRequest();
+        }
+
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+
+        for (var i = 0; i < count; i++)
+        {
+            var index =
+                i % service.Project.ConfigItems.Count;
+
+            var item =
+                service.Project.ConfigItems[index];
+
+            service.History.Execute(
+                new ToggleActiveCommand(item));
+        }
+
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state = CreateCommandResponse(service),
+            benchmark = new
+            {
+                operations = count,
+                elapsedMilliseconds =
+                    stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
 
 var snapshotApi = app.MapGroup("/api/snapshot");
 
@@ -223,26 +262,96 @@ snapshotApi.MapPost(
         return Results.Ok(CreateSnapshotResponse(service));
     });
 
+snapshotApi.MapPost(
+    "/experiment/reset/{itemCount:int}",
+    (
+        int itemCount,
+        SnapshotSpikeService service) =>
+    {
+        if (itemCount is < 1 or > 10000)
+        {
+            return Results.BadRequest();
+        }
+
+        service.Reset(itemCount);
+
+        return Results.Ok(
+            CreateSnapshotResponse(service));
+    });
+
+snapshotApi.MapPost(
+    "/experiment/toggles/{count:int}",
+    (
+        int count,
+        SnapshotSpikeService service) =>
+    {
+        if (count is < 1 or > 10000)
+        {
+            return Results.BadRequest();
+        }
+
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+
+        for (var i = 0; i < count; i++)
+        {
+            var index =
+                i % service.Project.ConfigItems.Count;
+
+            service.History.Execute(
+                service.Project,
+                project =>
+                {
+                    var item =
+                        project.ConfigItems[index];
+
+                    item.Active = !item.Active;
+                });
+        }
+
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state = CreateSnapshotResponse(service),
+            benchmark = new
+            {
+                operations = count,
+                elapsedMilliseconds =
+                    stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
+
 static object CreateCommandResponse(
-    ProjectState state,
-    CommandHistory history)
+    CommandSpikeService service)
 {
     return new
     {
-        projectState = state,
-        canUndo = history.CanUndo,
-        canRedo = history.CanRedo,
+        projectState = service.Project,
+        canUndo = service.History.CanUndo,
+        canRedo = service.History.CanRedo,
 
         diagnostics = new
         {
             approach = "command",
             representation = "Semantic commands",
 
-            undoEntries = history.UndoCount,
-            redoEntries = history.RedoCount,
+            undoEntries =
+                service.History.UndoCount,
 
-            undoEntryDetails = history.UndoEntryTypes,
-            redoEntryDetails = history.RedoEntryTypes,
+            redoEntries =
+                service.History.RedoCount,
+
+            undoEntryDetails =
+                service.History.UndoEntryTypes,
+
+            redoEntryDetails =
+                service.History.RedoEntryTypes,
 
             storedConfigItemCopies = (int?)null
         }

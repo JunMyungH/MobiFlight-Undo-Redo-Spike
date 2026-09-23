@@ -28,3 +28,13 @@ export type SpikeState = {
 
   diagnostics: HistoryDiagnostics
 }
+
+export type BenchmarkResult = {
+  operations: number
+  elapsedMilliseconds: number
+}
+
+export type ExperimentResponse = {
+  state: SpikeState
+  benchmark: BenchmarkResult
+}

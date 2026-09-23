@@ -1,9 +1,9 @@
-public class SnapshotSpikeService
+﻿public class CommandSpikeService
 {
     public ProjectState Project { get; private set; }
-    public SnapshotHistory History { get; } = new();
+    public CommandHistory History { get; } = new();
 
-    public SnapshotSpikeService()
+    public CommandSpikeService()
     {
         Project = CreateProject(3);
     }

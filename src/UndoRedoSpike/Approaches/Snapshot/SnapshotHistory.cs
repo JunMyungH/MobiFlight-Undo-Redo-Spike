@@ -69,4 +69,10 @@ public class SnapshotHistory
 
         return true;
     }
+
+    public void Clear()
+    {
+        _undoStack.Clear();
+        _redoStack.Clear();
+    }
 }

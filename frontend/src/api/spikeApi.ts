@@ -1,4 +1,4 @@
-import type { SpikeState } from '../types'
+import type { ExperimentResponse, SpikeState } from '../types'
 
 const API_URL = 'http://localhost:5094'
 
@@ -72,4 +72,33 @@ export function redo(approach: Approach) {
     '/history/redo',
     'POST',
   )
+}
+
+export function resetExperiment(
+  approach: Approach,
+  itemCount: number,
+) {
+  return request(
+    approach,
+    `/experiment/reset/${itemCount}`,
+    'POST',
+  )
+}
+
+export async function runToggleExperiment(
+  approach: Approach,
+  count: number,
+): Promise<ExperimentResponse> {
+  const response = await fetch(
+    `${API_URL}/api/${approach}/experiment/toggles/${count}`,
+    {
+      method: 'POST',
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+
+  return response.json()
 }

@@ -4,6 +4,8 @@ import {
   deleteItem,
   getState,
   redo,
+  resetExperiment,
+  runToggleExperiment,
   toggleItem,
   undo,
 } from '../api/spikeApi'
@@ -28,6 +30,9 @@ function UndoRedoDemo({
 
   const [pending, setPending] =
     useState(false)
+
+  const [benchmarkMs, setBenchmarkMs] =
+    useState<number | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -128,6 +133,85 @@ function UndoRedoDemo({
           Redo
         </button>
       </div>
+
+      <section className="experiment-controls">
+        <h2>Experiment</h2>
+
+        <button
+          disabled={pending}
+          onClick={() =>
+            runAction(() =>
+              resetExperiment(approach, 3),
+            )
+          }
+        >
+          Reset 3 Items
+        </button>
+
+        {' '}
+
+        <button
+          disabled={pending}
+          onClick={() =>
+            runAction(() =>
+              resetExperiment(approach, 100),
+            )
+          }
+        >
+          Generate 100 Items
+        </button>
+
+        {' '}
+
+        <button
+          disabled={pending}
+          onClick={() =>
+            runAction(() =>
+              resetExperiment(approach, 1000),
+            )
+          }
+        >
+          Generate 1000 Items
+        </button>
+
+        {' '}
+
+        <button
+          disabled={pending}
+          onClick={async () => {
+            try {
+              setPending(true)
+
+              const result =
+                await runToggleExperiment(
+                  approach,
+                  100,
+                )
+
+              setState(result.state)
+              setBenchmarkMs(
+                result.benchmark.elapsedMilliseconds,
+              )
+            } catch (err: unknown) {
+              setError(
+                err instanceof Error
+                  ? err.message
+                  : 'Unknown error',
+              )
+            } finally {
+              setPending(false)
+            }
+          }}
+        >
+          Run 100 Toggles
+        </button>
+
+        {benchmarkMs !== null && (
+          <p>
+            Last run: {benchmarkMs.toFixed(3)} ms
+          </p>
+        )}
+      </section>
 
       <h2>Config Items</h2>
 
