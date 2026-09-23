@@ -172,6 +172,87 @@ function UndoRedoDemo({
         )}
       </ul>
 
+      <section className="history-inspector">
+        <h2>History Inspector</h2>
+
+        <dl className="history-summary">
+          <div>
+            <dt>Representation</dt>
+            <dd>{state.diagnostics.representation}</dd>
+          </div>
+
+          <div>
+            <dt>Undo entries</dt>
+            <dd>{state.diagnostics.undoEntries}</dd>
+          </div>
+
+          <div>
+            <dt>Redo entries</dt>
+            <dd>{state.diagnostics.redoEntries}</dd>
+          </div>
+
+          <div>
+            <dt>Current ConfigItems</dt>
+            <dd>
+              {state.projectState.configItems.length}
+            </dd>
+          </div>
+
+          {state.diagnostics.storedConfigItemCopies !== null && (
+            <div>
+              <dt>Stored ConfigItem copies</dt>
+              <dd>
+                {state.diagnostics.storedConfigItemCopies}
+              </dd>
+            </div>
+          )}
+        </dl>
+
+        <div className="history-stacks">
+          <div>
+            <h3>Undo stack</h3>
+            <p className="history-order">
+              Newest first
+            </p>
+
+            {state.diagnostics.undoEntryDetails.length === 0 ? (
+              <p>Empty</p>
+            ) : (
+              <ol>
+                {state.diagnostics.undoEntryDetails.map(
+                  (entry, index) => (
+                    <li key={`${entry}-${index}`}>
+                      {entry}
+                    </li>
+                  ),
+                )}
+              </ol>
+            )}
+          </div>
+
+          <div>
+            <h3>Redo stack</h3>
+            <p className="history-order">
+              Newest first
+            </p>
+
+            {state.diagnostics.redoEntryDetails.length === 0 ? (
+              <p>Empty</p>
+            ) : (
+              <ol>
+                {state.diagnostics.redoEntryDetails.map(
+                  (entry, index) => (
+                    <li key={`${entry}-${index}`}>
+                      {entry}
+                    </li>
+                  ),
+                )}
+              </ol>
+            )}
+          </div>
+        </div>
+      </section>
+
       {error && (
         <p>
           Request failed: {error}

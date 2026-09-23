@@ -58,12 +58,7 @@ commandApi.MapGet("/state", (
     ProjectState state,
     CommandHistory history) =>
 {
-    return Results.Ok(new
-    {
-        projectState = state,
-        canUndo = history.CanUndo,
-        canRedo = history.CanRedo
-    });
+    return Results.Ok(CreateCommandResponse(state, history));
 });
 
 commandApi.MapPost("/config-items/{id:guid}/toggle", (
@@ -82,12 +77,7 @@ commandApi.MapPost("/config-items/{id:guid}/toggle", (
     history.Execute(
         new ToggleActiveCommand(item));
 
-    return Results.Ok(new
-    {
-        projectState = state,
-        canUndo = history.CanUndo,
-        canRedo = history.CanRedo
-    });
+    return Results.Ok(CreateCommandResponse(state, history));
 });
 
 commandApi.MapDelete("/config-items/{id:guid}", (
@@ -106,12 +96,7 @@ commandApi.MapDelete("/config-items/{id:guid}", (
     history.Execute(
         new DeleteConfigItemCommand(state, id));
 
-    return Results.Ok(new
-    {
-        projectState = state,
-        canUndo = history.CanUndo,
-        canRedo = history.CanRedo
-    });
+    return Results.Ok(CreateCommandResponse(state, history));
 });
 
 commandApi.MapPost("/history/undo", (
@@ -126,12 +111,7 @@ commandApi.MapPost("/history/undo", (
         });
     }
 
-    return Results.Ok(new
-    {
-        projectState = state,
-        canUndo = history.CanUndo,
-        canRedo = history.CanRedo
-    });
+    return Results.Ok(CreateCommandResponse(state, history));
 });
 
 commandApi.MapPost("/history/redo", (
@@ -146,12 +126,7 @@ commandApi.MapPost("/history/redo", (
         });
     }
 
-    return Results.Ok(new
-    {
-        projectState = state,
-        canUndo = history.CanUndo,
-        canRedo = history.CanRedo
-    });
+    return Results.Ok(CreateCommandResponse(state, history));
 });
 
 
@@ -160,12 +135,7 @@ var snapshotApi = app.MapGroup("/api/snapshot");
 snapshotApi.MapGet("/state", (
     SnapshotSpikeService service) =>
 {
-    return Results.Ok(new
-    {
-        projectState = service.Project,
-        canUndo = service.History.CanUndo,
-        canRedo = service.History.CanRedo
-    });
+    return Results.Ok(CreateSnapshotResponse(service));
 });
 
 snapshotApi.MapPost(
@@ -194,12 +164,7 @@ snapshotApi.MapPost(
                 item.Active = !item.Active;
             });
 
-        return Results.Ok(new
-        {
-            projectState = service.Project,
-            canUndo = service.History.CanUndo,
-            canRedo = service.History.CanRedo
-        });
+        return Results.Ok(CreateSnapshotResponse(service));
     });
 
 snapshotApi.MapDelete(
@@ -225,12 +190,7 @@ snapshotApi.MapDelete(
                     item => item.Id == id);
             });
 
-        return Results.Ok(new
-        {
-            projectState = service.Project,
-            canUndo = service.History.CanUndo,
-            canRedo = service.History.CanRedo
-        });
+        return Results.Ok(CreateSnapshotResponse(service));
     });
 
 snapshotApi.MapPost(
@@ -245,12 +205,7 @@ snapshotApi.MapPost(
             });
         }
 
-        return Results.Ok(new
-        {
-            projectState = service.Project,
-            canUndo = service.History.CanUndo,
-            canRedo = service.History.CanRedo
-        });
+        return Results.Ok(CreateSnapshotResponse(service));
     });
 
 snapshotApi.MapPost(
@@ -265,12 +220,68 @@ snapshotApi.MapPost(
             });
         }
 
-        return Results.Ok(new
-        {
-            projectState = service.Project,
-            canUndo = service.History.CanUndo,
-            canRedo = service.History.CanRedo
-        });
+        return Results.Ok(CreateSnapshotResponse(service));
     });
+
+static object CreateCommandResponse(
+    ProjectState state,
+    CommandHistory history)
+{
+    return new
+    {
+        projectState = state,
+        canUndo = history.CanUndo,
+        canRedo = history.CanRedo,
+
+        diagnostics = new
+        {
+            approach = "command",
+            representation = "Semantic commands",
+
+            undoEntries = history.UndoCount,
+            redoEntries = history.RedoCount,
+
+            undoEntryDetails = history.UndoEntryTypes,
+            redoEntryDetails = history.RedoEntryTypes,
+
+            storedConfigItemCopies = (int?)null
+        }
+    };
+}
+
+static object CreateSnapshotResponse(
+    SnapshotSpikeService service)
+{
+    return new
+    {
+        projectState = service.Project,
+        canUndo = service.History.CanUndo,
+        canRedo = service.History.CanRedo,
+
+        diagnostics = new
+        {
+            approach = "snapshot",
+            representation = "Full ProjectState snapshots",
+
+            undoEntries = service.History.UndoCount,
+            redoEntries = service.History.RedoCount,
+
+            undoEntryDetails =
+                service.History.UndoSnapshotSizes
+                    .Select(count =>
+                        $"ProjectState snapshot ({count} ConfigItems)")
+                    .ToArray(),
+
+            redoEntryDetails =
+                service.History.RedoSnapshotSizes
+                    .Select(count =>
+                        $"ProjectState snapshot ({count} ConfigItems)")
+                    .ToArray(),
+
+            storedConfigItemCopies =
+                (int?)service.History.StoredConfigItemCopies
+        }
+    };
+}
 
 app.Run();

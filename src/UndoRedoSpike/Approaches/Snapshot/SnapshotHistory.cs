@@ -9,6 +9,20 @@ public class SnapshotHistory
     public int UndoCount => _undoStack.Count;
     public int RedoCount => _redoStack.Count;
 
+    public IReadOnlyList<int> UndoSnapshotSizes =>
+    _undoStack
+        .Select(snapshot => snapshot.ConfigItems.Count)
+        .ToList();
+
+    public IReadOnlyList<int> RedoSnapshotSizes =>
+        _redoStack
+            .Select(snapshot => snapshot.ConfigItems.Count)
+            .ToList();
+
+    public int StoredConfigItemCopies =>
+        _undoStack.Sum(snapshot => snapshot.ConfigItems.Count)
+        + _redoStack.Sum(snapshot => snapshot.ConfigItems.Count);
+
     public void Execute(ProjectState project, Action<ProjectState> mutation)
     {
         var before = project.Clone();

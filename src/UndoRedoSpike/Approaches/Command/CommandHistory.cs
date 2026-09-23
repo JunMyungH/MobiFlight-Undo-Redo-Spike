@@ -9,6 +9,16 @@ public class CommandHistory
     public int UndoCount => _undoStack.Count;
     public int RedoCount => _redoStack.Count;
 
+    public IReadOnlyList<string> UndoEntryTypes =>
+    _undoStack
+        .Select(command => command.GetType().Name)
+        .ToList();
+
+    public IReadOnlyList<string> RedoEntryTypes =>
+        _redoStack
+            .Select(command => command.GetType().Name)
+            .ToList();
+
     public void Execute(IUndoableCommand command)
     {
         command.Execute();
