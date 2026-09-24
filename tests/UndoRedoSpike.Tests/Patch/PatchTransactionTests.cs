@@ -328,4 +328,59 @@ public class PatchTransactionTests
             0,
             history.UndoCount);
     }
+
+    private sealed class UndoFailingPatch
+    : IPatchOperation
+    {
+        public string Description =>
+            "undo failing patch";
+
+        public void Apply(ProjectState project)
+        {
+        }
+
+        public void Undo(ProjectState project)
+        {
+            throw new InvalidOperationException(
+                "Simulated Undo failure.");
+        }
+    }
+
+    [TestMethod]
+    public void FailedUndo_RestoresAlreadyUndoneOperations()
+    {
+        var item = new ConfigItem
+        {
+            Name = "Landing Light",
+            Active = true
+        };
+
+        var project = new ProjectState
+        {
+            ConfigItems = [item]
+        };
+
+        var transaction = new PatchTransaction(
+        [
+            new UndoFailingPatch(),
+
+        new ReplaceNamePatch(
+            item.Id,
+            "Landing Light",
+            "Landing Light (Edited)")
+        ]);
+
+        transaction.Apply(project);
+
+        Assert.AreEqual(
+            "Landing Light (Edited)",
+            item.Name);
+
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            transaction.Undo(project));
+
+        Assert.AreEqual(
+            "Landing Light (Edited)",
+            item.Name);
+    }
 }

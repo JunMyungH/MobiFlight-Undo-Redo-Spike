@@ -189,4 +189,48 @@ public class PatchHistoryTests
             1,
             history.RedoCount);
     }
+
+    [TestMethod]
+    public void FailedUndo_KeepsTransactionInUndoStack()
+    {
+        var item = new ConfigItem
+        {
+            Name = "Landing Light",
+            Active = true
+        };
+
+        var project = new ProjectState
+        {
+            ConfigItems = [item]
+        };
+
+        var history = new PatchHistory();
+
+        history.Execute(
+            project,
+            new PatchTransaction(
+            [
+                new ReplaceActivePatch(
+                item.Id,
+                true,
+                false)
+            ]));
+
+        Assert.AreEqual(
+            1,
+            history.UndoCount);
+
+        project.ConfigItems.Clear();
+
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            history.Undo(project));
+
+        Assert.AreEqual(
+            1,
+            history.UndoCount);
+
+        Assert.AreEqual(
+            0,
+            history.RedoCount);
+    }
 }

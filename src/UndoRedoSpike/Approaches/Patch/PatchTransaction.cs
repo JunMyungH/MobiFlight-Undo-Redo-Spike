@@ -41,9 +41,32 @@ public class PatchTransaction
 
     public void Undo(ProjectState project)
     {
-        for (var i = _operations.Count - 1; i >= 0; i--)
+        var undoneOperations =
+            new Stack<IPatchOperation>();
+
+        try
         {
-            _operations[i].Undo(project);
+            for (var i = _operations.Count - 1; i >= 0; i--)
+            {
+                var operation =
+                    _operations[i];
+
+                operation.Undo(project);
+
+                undoneOperations.Push(operation);
+            }
+        }
+        catch
+        {
+            while (undoneOperations.Count > 0)
+            {
+                var operation =
+                    undoneOperations.Pop();
+
+                operation.Apply(project);
+            }
+
+            throw;
         }
     }
 }
