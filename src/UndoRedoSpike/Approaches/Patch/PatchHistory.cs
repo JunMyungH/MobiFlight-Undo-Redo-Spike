@@ -34,10 +34,11 @@ public class PatchHistory
         if (_undoStack.Count == 0)
             return false;
 
-        var transaction = _undoStack.Pop();
+        var transaction = _undoStack.Peek();
 
         transaction.Undo(project);
 
+        _undoStack.Pop();
         _redoStack.Push(transaction);
 
         return true;
@@ -48,10 +49,11 @@ public class PatchHistory
         if (_redoStack.Count == 0)
             return false;
 
-        var transaction = _redoStack.Pop();
+        var transaction = _redoStack.Peek();
 
         transaction.Apply(project);
 
+        _redoStack.Pop();
         _undoStack.Push(transaction);
 
         return true;

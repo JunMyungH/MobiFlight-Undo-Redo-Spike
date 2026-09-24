@@ -13,9 +13,29 @@ public class PatchTransaction
 
     public void Apply(ProjectState project)
     {
-        foreach (var operation in _operations)
+        var appliedOperations =
+            new Stack<IPatchOperation>();
+
+        try
         {
-            operation.Apply(project);
+            foreach (var operation in _operations)
+            {
+                operation.Apply(project);
+
+                appliedOperations.Push(operation);
+            }
+        }
+        catch
+        {
+            while (appliedOperations.Count > 0)
+            {
+                var operation =
+                    appliedOperations.Pop();
+
+                operation.Undo(project);
+            }
+
+            throw;
         }
     }
 
