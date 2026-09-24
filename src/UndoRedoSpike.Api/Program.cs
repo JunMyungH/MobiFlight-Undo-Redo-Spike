@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using UndoRedoSpike.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,6 +20,8 @@ builder.Services.AddCors(options =>
 builder.Services.AddSingleton<CommandSpikeService>();
 
 builder.Services.AddSingleton<SnapshotSpikeService>();
+
+builder.Services.AddSingleton<PatchSpikeService>();
 
 var app = builder.Build();
 
@@ -378,6 +381,176 @@ snapshotApi.MapPost(
             CreateSnapshotResponse(service));
     });
 
+var patchApi = app.MapGroup("/api/patch");
+
+patchApi.MapGet(
+    "/state",
+    (PatchSpikeService service) =>
+    {
+        return Results.Ok(
+            CreatePatchResponse(service));
+    });
+
+patchApi.MapPost(
+    "/config-items/{id:guid}/toggle",
+    (
+        Guid id,
+        PatchSpikeService service) =>
+    {
+        var item =
+            service.Project.ConfigItems
+                .FirstOrDefault(
+                    item => item.Id == id);
+
+        if (item is null)
+        {
+            return Results.NotFound();
+        }
+
+        var transaction =
+            new PatchTransaction(
+            [
+                new ReplaceActivePatch(
+                    item.Id,
+                    item.Active,
+                    !item.Active)
+            ]);
+
+        service.History.Execute(
+            service.Project,
+            transaction);
+
+        return Results.Ok(
+            CreatePatchResponse(service));
+    });
+
+patchApi.MapDelete(
+    "/config-items/{id:guid}",
+    (
+        Guid id,
+        PatchSpikeService service) =>
+    {
+        var index =
+            service.Project.ConfigItems.FindIndex(
+                item => item.Id == id);
+
+        if (index < 0)
+        {
+            return Results.NotFound();
+        }
+
+        var item =
+            service.Project.ConfigItems[index];
+
+        var transaction =
+            new PatchTransaction(
+            [
+                new RemoveConfigItemPatch(
+                    item,
+                    index)
+            ]);
+
+        service.History.Execute(
+            service.Project,
+            transaction);
+
+        return Results.Ok(
+            CreatePatchResponse(service));
+    });
+
+patchApi.MapPost(
+    "/history/undo",
+    (PatchSpikeService service) =>
+    {
+        if (!service.History.Undo(
+            service.Project))
+        {
+            return Results.Conflict(new
+            {
+                message = "Nothing to undo."
+            });
+        }
+
+        return Results.Ok(
+            CreatePatchResponse(service));
+    });
+
+patchApi.MapPost(
+    "/history/redo",
+    (PatchSpikeService service) =>
+    {
+        if (!service.History.Redo(
+            service.Project))
+        {
+            return Results.Conflict(new
+            {
+                message = "Nothing to redo."
+            });
+        }
+
+        return Results.Ok(
+            CreatePatchResponse(service));
+    });
+
+patchApi.MapPost(
+    "/experiment/compound-edit",
+    (PatchSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+
+        var item =
+            service.Project.ConfigItems[0];
+
+        var lastIndex =
+            service.Project.ConfigItems.Count - 1;
+
+        var transaction =
+            new PatchTransaction(
+            [
+                new ReplaceNamePatch(
+                    item.Id,
+                    item.Name,
+                    $"{item.Name} (Edited)"),
+
+                new ReplaceActivePatch(
+                    item.Id,
+                    item.Active,
+                    !item.Active),
+
+                new MoveConfigItemPatch(
+                    item.Id,
+                    0,
+                    lastIndex)
+            ]);
+
+        service.History.Execute(
+            service.Project,
+            transaction);
+
+        return Results.Ok(
+            CreatePatchResponse(service));
+    });
+
+patchApi.MapPost(
+    "/experiment/reset/{itemCount:int}",
+    (
+        int itemCount,
+        PatchSpikeService service) =>
+    {
+        if (itemCount is < 1 or > 10000)
+        {
+            return Results.BadRequest();
+        }
+
+        service.Reset(itemCount);
+
+        return Results.Ok(
+            CreatePatchResponse(service));
+    });
+
 static object CreateCommandResponse(
     CommandSpikeService service)
 {
@@ -440,6 +613,37 @@ static object CreateSnapshotResponse(
 
             storedConfigItemCopies =
                 (int?)service.History.StoredConfigItemCopies
+        }
+    };
+}
+
+static object CreatePatchResponse(
+    PatchSpikeService service)
+{
+    return new
+    {
+        projectState = service.Project,
+        canUndo = service.History.CanUndo,
+        canRedo = service.History.CanRedo,
+
+        diagnostics = new
+        {
+            approach = "patch",
+            representation = "Generic state patches",
+
+            undoEntries =
+                service.History.UndoCount,
+
+            redoEntries =
+                service.History.RedoCount,
+
+            undoEntryDetails =
+                service.History.UndoEntryDetails,
+
+            redoEntryDetails =
+                service.History.RedoEntryDetails,
+
+            storedConfigItemCopies = (int?)null
         }
     };
 }

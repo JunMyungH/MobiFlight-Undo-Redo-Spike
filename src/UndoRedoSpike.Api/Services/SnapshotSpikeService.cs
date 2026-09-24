@@ -1,56 +1,19 @@
-public class SnapshotSpikeService
-{
-    public ProjectState Project { get; private set; }
-    public SnapshotHistory History { get; } = new();
-
-    public SnapshotSpikeService()
+namespace UndoRedoSpike.Api.Services
+{ 
+    public class SnapshotSpikeService
     {
-        Project = CreateProject(3);
-    }
+        public ProjectState Project { get; private set; }
+        public SnapshotHistory History { get; } = new();
 
-    public void Reset(int itemCount)
-    {
-        Project = CreateProject(itemCount);
-        History.Clear();
-    }
-
-    private static ProjectState CreateProject(int itemCount)
-    {
-        if (itemCount == 3)
+        public SnapshotSpikeService()
         {
-            return new ProjectState
-            {
-                ConfigItems =
-                [
-                    new ConfigItem
-                    {
-                        Name = "Landing Light",
-                        Active = true
-                    },
-                    new ConfigItem
-                    {
-                        Name = "Gear Indicator",
-                        Active = false
-                    },
-                    new ConfigItem
-                    {
-                        Name = "Flaps",
-                        Active = true
-                    }
-                ]
-            };
+            Project = CreateProject.Create(3);
         }
 
-        return new ProjectState
+        public void Reset(int itemCount)
         {
-            ConfigItems = Enumerable
-                .Range(1, itemCount)
-                .Select(index => new ConfigItem
-                {
-                    Name = $"Config Item {index}",
-                    Active = index % 2 == 0
-                })
-                .ToList()
-        };
+            Project = CreateProject.Create(itemCount);
+            History.Clear();
+        }
     }
 }

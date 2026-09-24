@@ -1,11 +1,11 @@
 ﻿namespace UndoRedoSpike.Api.Services
 {
-    public class CommandSpikeService
+    public class PatchSpikeService
     {
         public ProjectState Project { get; private set; }
-        public CommandHistory History { get; } = new();
+        public PatchHistory History { get; } = new();
 
-        public CommandSpikeService()
+        public PatchSpikeService()
         {
             Project = CreateProject.Create(3);
         }
@@ -15,6 +15,5 @@
             Project = CreateProject.Create(itemCount);
             History.Clear();
         }
-
     }
 }
