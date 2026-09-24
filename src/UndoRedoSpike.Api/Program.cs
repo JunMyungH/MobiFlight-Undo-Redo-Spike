@@ -551,6 +551,63 @@ patchApi.MapPost(
             CreatePatchResponse(service));
     });
 
+patchApi.MapPost(
+    "/experiment/toggles/{count:int}",
+    (
+        int count,
+        PatchSpikeService service) =>
+    {
+        if (count is < 1 or > 10000)
+        {
+            return Results.BadRequest();
+        }
+
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+
+        for (var i = 0; i < count; i++)
+        {
+            var index =
+                i % service.Project.ConfigItems.Count;
+
+            var item =
+                service.Project.ConfigItems[index];
+
+            var transaction =
+                new PatchTransaction(
+                [
+                    new ReplaceActivePatch(
+                        item.Id,
+                        item.Active,
+                        !item.Active)
+                ]);
+
+            service.History.Execute(
+                service.Project,
+                transaction);
+        }
+
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state =
+                CreatePatchResponse(service),
+
+            benchmark = new
+            {
+                operations = count,
+
+                elapsedMilliseconds =
+                    stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
+
 static object CreateCommandResponse(
     CommandSpikeService service)
 {
