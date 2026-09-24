@@ -23,6 +23,8 @@ builder.Services.AddSingleton<SnapshotSpikeService>();
 
 builder.Services.AddSingleton<PatchSpikeService>();
 
+builder.Services.AddSingleton<HybridSpikeService>();
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -608,6 +610,43 @@ patchApi.MapPost(
         });
     });
 
+var hybridApi = app.MapGroup("/api/hybrid");
+
+hybridApi.MapPost(
+    "/config-items/{id:guid}/toggle",
+    (
+        Guid id,
+        HybridSpikeService service) =>
+    {
+        var item =
+            service.Project.ConfigItems
+                .FirstOrDefault(
+                    item => item.Id == id);
+
+        if (item is null)
+        {
+            return Results.NotFound();
+        }
+
+        var entry =
+            new HybridHistoryEntry(
+                "Toggle Active",
+                new PatchTransaction(
+                [
+                    new ReplaceActivePatch(
+                        item.Id,
+                        item.Active,
+                        !item.Active)
+                ]));
+
+        service.History.Execute(
+            service.Project,
+            entry);
+
+        return Results.Ok(
+            CreateHybridResponse(service));
+    });
+
 static object CreateCommandResponse(
     CommandSpikeService service)
 {
@@ -687,6 +726,37 @@ static object CreatePatchResponse(
         {
             approach = "patch",
             representation = "Generic state patches",
+
+            undoEntries =
+                service.History.UndoCount,
+
+            redoEntries =
+                service.History.RedoCount,
+
+            undoEntryDetails =
+                service.History.UndoEntryDetails,
+
+            redoEntryDetails =
+                service.History.RedoEntryDetails,
+
+            storedConfigItemCopies = (int?)null
+        }
+    };
+}
+
+static object CreateHybridResponse(
+    HybridSpikeService service)
+{
+    return new
+    {
+        projectState = service.Project,
+        canUndo = service.History.CanUndo,
+        canRedo = service.History.CanRedo,
+
+        diagnostics = new
+        {
+            approach = "hybrid",
+            representation = "Semantic actions + generic patches",
 
             undoEntries =
                 service.History.UndoCount,
