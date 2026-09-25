@@ -215,3 +215,9 @@ Local / small mutation
 Broad / complex mutation
 -> Semantic Action + Targeted Snapshot
 ```
+
+## Cross-Approach Observation
+
+The experiments indicate that the suitability of an Undo/Redo representation may depend on the mutation pattern rather than on whether one approach can technically support the operation.
+
+Localized mutations benefit from compact reversal data, while broader mutations may benefit from a more generic state-capture mechanism.

@@ -195,6 +195,41 @@ commandApi.MapPost(
             CreateCommandResponse(service));
     });
 
+commandApi.MapPost(
+    "/experiment/bulk-action",
+    (CommandSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        var command =
+            new BulkToggleCommand(
+                service.Project.ConfigItems);
+
+        service.History.Execute(command);
+
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state =
+                CreateCommandResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+
+                elapsedMilliseconds =
+                    stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
+
 var snapshotApi = app.MapGroup("/api/snapshot");
 
 snapshotApi.MapGet("/state", (

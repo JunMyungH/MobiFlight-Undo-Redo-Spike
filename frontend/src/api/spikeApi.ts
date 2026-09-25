@@ -112,3 +112,20 @@ export function compoundEdit(
     'POST',
   )
 }
+
+export async function runBulkAction(
+  approach: Approach,
+): Promise<ExperimentResponse> {
+  const response = await fetch(
+    `${API_URL}/api/${approach}/experiment/bulk-action`,
+    {
+      method: 'POST',
+    },
+  )
+  
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+
+  return response.json()
+}
