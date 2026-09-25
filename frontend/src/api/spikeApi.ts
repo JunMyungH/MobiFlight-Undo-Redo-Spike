@@ -113,16 +113,33 @@ export function compoundEdit(
   )
 }
 
-export async function runBulkAction(
+export async function runBulkToggle(
   approach: Approach,
 ): Promise<ExperimentResponse> {
   const response = await fetch(
-    `${API_URL}/api/${approach}/experiment/bulk-action`,
+    `${API_URL}/api/${approach}/experiment/bulk-toggle`,
     {
       method: 'POST',
     },
   )
   
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+
+  return response.json()
+}
+
+export async function runBulkDelete(
+  approach: Approach,
+): Promise<ExperimentResponse> {
+  const response = await fetch(
+    `${API_URL}/api/${approach}/experiment/bulk-delete`,
+    {
+      method: 'POST',
+    },
+  )
+
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`)
   }

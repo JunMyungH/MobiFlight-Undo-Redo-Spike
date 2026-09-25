@@ -196,7 +196,7 @@ commandApi.MapPost(
     });
 
 commandApi.MapPost(
-    "/experiment/bulk-action",
+    "/experiment/bulk-toggle",
     (CommandSpikeService service) =>
     {
         if (service.Project.ConfigItems.Count == 0)
@@ -210,6 +210,55 @@ commandApi.MapPost(
         var command =
             new BulkToggleCommand(
                 service.Project.ConfigItems);
+
+        service.History.Execute(command);
+
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state =
+                CreateCommandResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+
+                elapsedMilliseconds =
+                    stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
+
+commandApi.MapPost(
+    "/experiment/bulk-delete",
+    (CommandSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        var selectedItems =
+            service.Project.ConfigItems
+                .Where(item => item.Active)
+                .ToList();
+
+        if (selectedItems.Count == 0)
+        {
+            return Results.BadRequest(new
+            {
+                message = "No active ConfigItems to delete."
+            });
+        }
+
+        var command =
+            new BulkDeleteCommand(
+                service.Project,
+                selectedItems);
 
         service.History.Execute(command);
 
@@ -419,7 +468,7 @@ snapshotApi.MapPost(
     });
 
 snapshotApi.MapPost(
-    "/experiment/bulk-action",
+    "/experiment/bulk-toggle",
     (SnapshotSpikeService service) =>
     {
         if (service.Project.ConfigItems.Count == 0)
@@ -439,6 +488,57 @@ snapshotApi.MapPost(
                     item.Active =
                         !item.Active;
                 }
+            });
+
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state =
+                CreateSnapshotResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+
+                elapsedMilliseconds =
+                    stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
+
+snapshotApi.MapPost(
+    "/experiment/bulk-delete",
+    (SnapshotSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+
+        var selectedIds =
+            service.Project.ConfigItems
+                .Where(item => item.Active)
+                .Select(item => item.Id)
+                .ToHashSet();
+
+            if (selectedIds.Count == 0)
+            {
+                return Results.BadRequest(new
+                {
+                    message = "No active ConfigItems to delete."
+                });
+            }
+
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        service.History.Execute(
+            service.Project,
+            project =>
+            {
+                project.ConfigItems.RemoveAll(
+                    item => selectedIds.Contains(item.Id));
             });
 
         stopwatch.Stop();
@@ -686,7 +786,7 @@ patchApi.MapPost(
     });
 
 patchApi.MapPost(
-    "/experiment/bulk-action",
+    "/experiment/bulk-toggle",
     (PatchSpikeService service) =>
     {
         if (service.Project.ConfigItems.Count == 0)
@@ -705,6 +805,72 @@ patchApi.MapPost(
                         item.Id,
                         item.Active,
                         !item.Active))
+                .ToList();
+
+        var transaction =
+            new PatchTransaction(
+                operations);
+
+        service.History.Execute(
+            service.Project,
+            transaction);
+
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state =
+                CreatePatchResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+
+                elapsedMilliseconds =
+                    stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
+
+patchApi.MapPost(
+    "/experiment/bulk-delete",
+    (PatchSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        var targets =
+            service.Project.ConfigItems
+                .Select((item, index) => new
+                {
+                    Item = item,
+                    Index = index
+                })
+                .Where(entry => entry.Item.Active)
+                .OrderByDescending(
+                    entry => entry.Index)
+                .ToList();
+
+        if (targets.Count == 0)
+        {
+            return Results.BadRequest(new
+            {
+                message = "No active ConfigItems to delete."
+            });
+        }
+
+        var operations =
+            targets
+                .Select(entry =>
+                    (IPatchOperation)
+                    new RemoveConfigItemPatch(
+                        entry.Item,
+                        entry.Index))
                 .ToList();
 
         var transaction =
@@ -967,7 +1133,7 @@ hybridApi.MapPost(
     });
 
 hybridApi.MapPost(
-    "/experiment/bulk-action",
+    "/experiment/bulk-toggle",
     (HybridSpikeService service) =>
     {
         if (service.Project.ConfigItems.Count == 0)
@@ -991,6 +1157,74 @@ hybridApi.MapPost(
         var entry =
             new HybridHistoryEntry(
                 "Bulk Toggle",
+                new PatchTransaction(
+                    operations));
+
+        service.History.Execute(
+            service.Project,
+            entry);
+
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state =
+                CreateHybridResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+
+                elapsedMilliseconds =
+                    stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
+
+hybridApi.MapPost(
+    "/experiment/bulk-delete",
+    (HybridSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        var targets =
+            service.Project.ConfigItems
+                .Select((item, index) => new
+                {
+                    Item = item,
+                    Index = index
+                })
+                .Where(entry => entry.Item.Active)
+                .OrderByDescending(
+                    entry => entry.Index)
+                .ToList();
+
+        if (targets.Count == 0)
+        {
+            return Results.BadRequest(new
+            {
+                message = "No active ConfigItems to delete."
+            });
+        }
+
+        var operations =
+            targets
+                .Select(entry =>
+                    (IPatchOperation)
+                    new RemoveConfigItemPatch(
+                        entry.Item,
+                        entry.Index))
+                .ToList();
+
+        var entry =
+            new HybridHistoryEntry(
+                "Bulk Delete",
                 new PatchTransaction(
                     operations));
 

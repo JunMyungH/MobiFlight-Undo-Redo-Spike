@@ -6,7 +6,8 @@ import {
   getState,
   redo,
   resetExperiment,
-  runBulkAction,
+  runBulkToggle,
+  runBulkDelete,
   runToggleExperiment,
   toggleItem,
   undo,
@@ -237,7 +238,7 @@ function UndoRedoDemo({
               setError(null)
 
               const result =
-                await runBulkAction(approach)
+                await runBulkToggle(approach)
 
               setState(result.state)
 
@@ -255,7 +256,41 @@ function UndoRedoDemo({
             }
           }}
         >
-          Run Bulk Action
+          Run Bulk Toggle
+        </button>
+
+        {' '}
+
+        <button
+          disabled={
+            pending ||
+            state.projectState.configItems.length === 0
+          }
+          onClick={async () => {
+            try {
+              setPending(true)
+              setError(null)
+
+              const result =
+                await runBulkDelete(approach)
+
+              setState(result.state)
+
+              setBenchmarkMs(
+                result.benchmark.elapsedMilliseconds,
+              )
+            } catch (err: unknown) {
+              setError(
+                err instanceof Error
+                  ? err.message
+                  : 'Unknown error',
+              )
+            } finally {
+              setPending(false)
+            }
+          }}
+        >
+          Run Bulk Delete
         </button>
 
         {benchmarkMs !== null && (
