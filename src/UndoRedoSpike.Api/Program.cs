@@ -612,6 +612,14 @@ patchApi.MapPost(
 
 var hybridApi = app.MapGroup("/api/hybrid");
 
+hybridApi.MapGet(
+    "/state",
+    (HybridSpikeService service) =>
+    {
+        return Results.Ok(
+            CreateHybridResponse(service));
+    });
+
 hybridApi.MapPost(
     "/config-items/{id:guid}/toggle",
     (
@@ -683,6 +691,42 @@ hybridApi.MapDelete(
     );
 
 hybridApi.MapPost(
+    "/history/undo",
+    (HybridSpikeService service) =>
+    {
+        if (!service.History.Undo(
+            service.Project))
+        {
+            return Results.Conflict(new
+            {
+                message = "Nothing to undo."
+            });
+        }
+
+        return Results.Ok(
+            CreateHybridResponse(service));
+
+    });
+
+hybridApi.MapPost(
+    "/history/redo",
+    (HybridSpikeService service) =>
+    {
+        if (!service.History.Redo(
+            service.Project))
+        {
+            return Results.Conflict(new
+            {
+                message = "Nothing to redo."
+            });
+        }
+
+        return Results.Ok(
+            CreateHybridResponse(service));
+
+    });
+
+hybridApi.MapPost(
     "/experiment/compound-edit",
     (HybridSpikeService service) =>
     {
@@ -723,6 +767,81 @@ hybridApi.MapPost(
 
         return Results.Ok(
             CreateHybridResponse(service));
+    });
+
+hybridApi.MapPost(
+    "/experiment/reset/{itemCount:int}",
+    (
+        int itemCount,
+        HybridSpikeService service) =>
+    {
+        if (itemCount is < 1 or > 10000)
+        {
+            return Results.BadRequest();
+        }
+
+        service.Reset(itemCount);
+
+        return Results.Ok(
+            CreateHybridResponse(service));
+    });
+
+hybridApi.MapPost(
+    "/experiment/toggles/{count:int}",
+    (
+        int count,
+        HybridSpikeService service) =>
+    {
+        if (count is < 1 or > 10000)
+        {
+            return Results.BadRequest();
+        }
+
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+
+        for (var i = 0; i < count; i++)
+        {
+            var index =
+                i % service.Project.ConfigItems.Count;
+
+            var item =
+                service.Project.ConfigItems[index];
+
+            var entry =
+                new HybridHistoryEntry(
+                    "Toggle Active",
+                    new PatchTransaction(
+                        [
+                        new ReplaceActivePatch(
+                            item.Id,
+                            item.Active,
+                            !item.Active)
+                        ]));
+            service.History.Execute(
+                service.Project,
+                entry);
+        }
+
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state =
+                CreateHybridResponse(service),
+
+            benchmark = new
+            {
+                operations = count,
+
+                elapsedMilliseconds =
+                    stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
     });
 
 
