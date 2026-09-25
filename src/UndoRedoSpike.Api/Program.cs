@@ -647,6 +647,85 @@ hybridApi.MapPost(
             CreateHybridResponse(service));
     });
 
+hybridApi.MapDelete(
+    "/config-items/{id:guid}",
+    (
+        Guid id,
+        HybridSpikeService service) =>
+    {
+        var index =
+            service.Project.ConfigItems.FindIndex(
+                item => item.Id == id);
+        if (index < 0)
+        {
+            return Results.NotFound();
+        }
+        var item =
+            service.Project.ConfigItems[index];
+
+        var entry =
+            new HybridHistoryEntry(
+                "Delete Config Item",
+                new PatchTransaction(
+                    [
+                        new RemoveConfigItemPatch(
+                            item,
+                            index)
+                    ]));
+
+        service.History.Execute(
+            service.Project,
+            entry);
+
+        return Results.Ok(
+            CreateHybridResponse(service));
+    }
+    );
+
+hybridApi.MapPost(
+    "/experiment/compound-edit",
+    (HybridSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+
+        var item =
+            service.Project.ConfigItems[0];
+        
+        var lastIndex =
+            service.Project.ConfigItems.Count - 1;
+
+        var entry =
+            new HybridHistoryEntry(
+                "Compound Edit",
+                new PatchTransaction(
+                    [
+                        new ReplaceNamePatch(
+                            item.Id,
+                            item.Name,
+                            $"{item.Name} (Edited)"),
+
+                        new ReplaceActivePatch(
+                            item.Id,
+                            item.Active,
+                            !item.Active),
+
+                        new MoveConfigItemPatch(
+                            item.Id,
+                            0,
+                            lastIndex)
+                    ]));
+        service.History.Execute(
+            service.Project,
+            entry);
+
+        return Results.Ok(
+            CreateHybridResponse(service));
+    });
+
+
 static object CreateCommandResponse(
     CommandSpikeService service)
 {
