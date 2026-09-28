@@ -58,19 +58,17 @@ export function deleteItem(
   )
 }
 
-export function undo(approach: Approach) {
-  return request(
+export function undo(approach: Approach): Promise<ExperimentResponse> {
+  return requestExperiment(
     approach,
     '/history/undo',
-    'POST',
   )
 }
 
-export function redo(approach: Approach) {
-  return request(
+export function redo(approach: Approach): Promise<ExperimentResponse> {
+  return requestExperiment(
     approach,
     '/history/redo',
-    'POST',
   )
 }
 
@@ -83,24 +81,6 @@ export function resetExperiment(
     `/experiment/reset/${itemCount}`,
     'POST',
   )
-}
-
-export async function runToggleExperiment(
-  approach: Approach,
-  count: number,
-): Promise<ExperimentResponse> {
-  const response = await fetch(
-    `${API_URL}/api/${approach}/experiment/toggles/${count}`,
-    {
-      method: 'POST',
-    },
-  )
-
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`)
-  }
-
-  return response.json()
 }
 
 export function compoundEdit(
@@ -116,27 +96,31 @@ export function compoundEdit(
 export async function runBulkToggle(
   approach: Approach,
 ): Promise<ExperimentResponse> {
-  const response = await fetch(
-    `${API_URL}/api/${approach}/experiment/bulk-toggle`,
-    {
-      method: 'POST',
-    },
+  return requestExperiment(
+    approach,
+    '/experiment/bult-toggle',
   )
-  
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`)
-  }
-
-  return response.json()
 }
 
 export async function runBulkDelete(
   approach: Approach,
 ): Promise<ExperimentResponse> {
+  return requestExperiment(
+    approach,
+    '/experiment/bulk-delete',
+  )
+
+}
+
+async function requestExperiment(
+  approach: Approach,
+  path: string,
+  method: HttpMethod = 'POST',
+): Promise<ExperimentResponse> {
   const response = await fetch(
-    `${API_URL}/api/${approach}/experiment/bulk-delete`,
+    `${API_URL}/api/${approach}${path}`,
     {
-      method: 'POST',
+      method,
     },
   )
 
