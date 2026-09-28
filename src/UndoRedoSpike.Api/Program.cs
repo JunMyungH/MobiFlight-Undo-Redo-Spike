@@ -86,7 +86,15 @@ commandApi.MapDelete("/config-items/{id:guid}", (
 commandApi.MapPost("/history/undo", (
     CommandSpikeService service) =>
 {
-    if (!service.History.Undo())
+    var stopwatch =
+        Stopwatch.StartNew();
+
+    var success =
+        service.History.Undo();
+
+    stopwatch.Stop();
+
+    if (!success)
     {
         return Results.Conflict(new
         {
@@ -94,14 +102,31 @@ commandApi.MapPost("/history/undo", (
         });
     }
 
-    return Results.Ok(
-        CreateCommandResponse(service));
+    return Results.Ok(new
+    {
+        state = CreateCommandResponse(service),
+
+        benchmark = new
+        {
+            operations = 1,
+            elapsedMilliseconds =
+                stopwatch.Elapsed.TotalMilliseconds
+        }
+    });
 });
 
 commandApi.MapPost("/history/redo", (
     CommandSpikeService service) =>
 {
-    if (!service.History.Redo())
+    var stopwatch =
+        Stopwatch.StartNew();
+
+    var success =
+        service.History.Redo();
+
+    stopwatch.Stop();
+
+    if (!success)
     {
         return Results.Conflict(new
         {
@@ -109,8 +134,17 @@ commandApi.MapPost("/history/redo", (
         });
     }
 
-    return Results.Ok(
-        CreateCommandResponse(service));
+    return Results.Ok(new
+    {
+        state = CreateCommandResponse(service),
+
+        benchmark = new
+        {
+            operations = 1,
+            elapsedMilliseconds =
+                stopwatch.Elapsed.TotalMilliseconds
+        }
+    });
 });
 
 commandApi.MapPost(
@@ -128,50 +162,6 @@ commandApi.MapPost(
 
         return Results.Ok(
             CreateCommandResponse(service));
-    });
-
-commandApi.MapPost(
-    "/experiment/toggles/{count:int}",
-    (
-        int count,
-        CommandSpikeService service) =>
-    {
-        if (count is < 1 or > 10000)
-        {
-            return Results.BadRequest();
-        }
-
-        if (service.Project.ConfigItems.Count == 0)
-        {
-            return Results.BadRequest();
-        }
-
-        var stopwatch = Stopwatch.StartNew();
-
-        for (var i = 0; i < count; i++)
-        {
-            var index =
-                i % service.Project.ConfigItems.Count;
-
-            var item =
-                service.Project.ConfigItems[index];
-
-            service.History.Execute(
-                new ToggleActiveCommand(item));
-        }
-
-        stopwatch.Stop();
-
-        return Results.Ok(new
-        {
-            state = CreateCommandResponse(service),
-            benchmark = new
-            {
-                operations = count,
-                elapsedMilliseconds =
-                    stopwatch.Elapsed.TotalMilliseconds
-            }
-        });
     });
 
 commandApi.MapPost(
@@ -346,7 +336,16 @@ snapshotApi.MapPost(
     "/history/undo",
     (SnapshotSpikeService service) =>
     {
-        if (!service.History.Undo(service.Project))
+        var stopwatch =
+        Stopwatch.StartNew();
+
+        var success =
+            service.History.Undo(
+                service.Project);
+
+        stopwatch.Stop();
+
+        if (!success)
         {
             return Results.Conflict(new
             {
@@ -354,14 +353,35 @@ snapshotApi.MapPost(
             });
         }
 
-        return Results.Ok(CreateSnapshotResponse(service));
+        return Results.Ok(new
+        {
+            state =
+                CreateSnapshotResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+
+                elapsedMilliseconds =
+                    stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
     });
 
 snapshotApi.MapPost(
     "/history/redo",
     (SnapshotSpikeService service) =>
     {
-        if (!service.History.Redo(service.Project))
+        var stopwatch =
+        Stopwatch.StartNew();
+
+        var success =
+            service.History.Redo(
+                service.Project);
+
+        stopwatch.Stop();
+
+        if (!success)
         {
             return Results.Conflict(new
             {
@@ -369,7 +389,19 @@ snapshotApi.MapPost(
             });
         }
 
-        return Results.Ok(CreateSnapshotResponse(service));
+        return Results.Ok(new
+        {
+            state =
+                CreateSnapshotResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+
+                elapsedMilliseconds =
+                    stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
     });
 
 snapshotApi.MapPost(
@@ -387,54 +419,6 @@ snapshotApi.MapPost(
 
         return Results.Ok(
             CreateSnapshotResponse(service));
-    });
-
-snapshotApi.MapPost(
-    "/experiment/toggles/{count:int}",
-    (
-        int count,
-        SnapshotSpikeService service) =>
-    {
-        if (count is < 1 or > 10000)
-        {
-            return Results.BadRequest();
-        }
-
-        if (service.Project.ConfigItems.Count == 0)
-        {
-            return Results.BadRequest();
-        }
-
-        var stopwatch = Stopwatch.StartNew();
-
-        for (var i = 0; i < count; i++)
-        {
-            var index =
-                i % service.Project.ConfigItems.Count;
-
-            service.History.Execute(
-                service.Project,
-                project =>
-                {
-                    var item =
-                        project.ConfigItems[index];
-
-                    item.Active = !item.Active;
-                });
-        }
-
-        stopwatch.Stop();
-
-        return Results.Ok(new
-        {
-            state = CreateSnapshotResponse(service),
-            benchmark = new
-            {
-                operations = count,
-                elapsedMilliseconds =
-                    stopwatch.Elapsed.TotalMilliseconds
-            }
-        });
     });
 
 snapshotApi.MapPost(
@@ -516,6 +500,9 @@ snapshotApi.MapPost(
             return Results.BadRequest();
         }
 
+        var stopwatch =
+            Stopwatch.StartNew();
+
         var selectedIds =
             service.Project.ConfigItems
                 .Where(item => item.Active)
@@ -529,9 +516,6 @@ snapshotApi.MapPost(
                     message = "No active ConfigItems to delete."
                 });
             }
-
-        var stopwatch =
-            Stopwatch.StartNew();
 
         service.History.Execute(
             service.Project,
@@ -639,8 +623,16 @@ patchApi.MapPost(
     "/history/undo",
     (PatchSpikeService service) =>
     {
-        if (!service.History.Undo(
-            service.Project))
+        var stopwatch =
+        Stopwatch.StartNew();
+
+        var success =
+            service.History.Undo(
+                service.Project);
+
+        stopwatch.Stop();
+
+        if (!success)
         {
             return Results.Conflict(new
             {
@@ -648,16 +640,35 @@ patchApi.MapPost(
             });
         }
 
-        return Results.Ok(
-            CreatePatchResponse(service));
+        return Results.Ok(new
+        {
+            state =
+                CreatePatchResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+
+                elapsedMilliseconds =
+                    stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
     });
 
 patchApi.MapPost(
     "/history/redo",
     (PatchSpikeService service) =>
     {
-        if (!service.History.Redo(
-            service.Project))
+        var stopwatch =
+        Stopwatch.StartNew();
+
+        var success =
+            service.History.Redo(
+                service.Project);
+
+        stopwatch.Stop();
+
+        if (!success)
         {
             return Results.Conflict(new
             {
@@ -665,8 +676,19 @@ patchApi.MapPost(
             });
         }
 
-        return Results.Ok(
-            CreatePatchResponse(service));
+        return Results.Ok(new
+        {
+            state =
+                CreatePatchResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+
+                elapsedMilliseconds =
+                    stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
     });
 
 patchApi.MapPost(
@@ -726,63 +748,6 @@ patchApi.MapPost(
 
         return Results.Ok(
             CreatePatchResponse(service));
-    });
-
-patchApi.MapPost(
-    "/experiment/toggles/{count:int}",
-    (
-        int count,
-        PatchSpikeService service) =>
-    {
-        if (count is < 1 or > 10000)
-        {
-            return Results.BadRequest();
-        }
-
-        if (service.Project.ConfigItems.Count == 0)
-        {
-            return Results.BadRequest();
-        }
-
-        var stopwatch = Stopwatch.StartNew();
-
-        for (var i = 0; i < count; i++)
-        {
-            var index =
-                i % service.Project.ConfigItems.Count;
-
-            var item =
-                service.Project.ConfigItems[index];
-
-            var transaction =
-                new PatchTransaction(
-                [
-                    new ReplaceActivePatch(
-                        item.Id,
-                        item.Active,
-                        !item.Active)
-                ]);
-
-            service.History.Execute(
-                service.Project,
-                transaction);
-        }
-
-        stopwatch.Stop();
-
-        return Results.Ok(new
-        {
-            state =
-                CreatePatchResponse(service),
-
-            benchmark = new
-            {
-                operations = count,
-
-                elapsedMilliseconds =
-                    stopwatch.Elapsed.TotalMilliseconds
-            }
-        });
     });
 
 patchApi.MapPost(
@@ -982,8 +947,16 @@ hybridApi.MapPost(
     "/history/undo",
     (HybridSpikeService service) =>
     {
-        if (!service.History.Undo(
-            service.Project))
+        var stopwatch =
+        Stopwatch.StartNew();
+
+        var success =
+            service.History.Undo(
+                service.Project);
+
+        stopwatch.Stop();
+
+        if (!success)
         {
             return Results.Conflict(new
             {
@@ -991,17 +964,35 @@ hybridApi.MapPost(
             });
         }
 
-        return Results.Ok(
-            CreateHybridResponse(service));
+        return Results.Ok(new
+        {
+            state =
+               CreateHybridResponse(service),
 
+            benchmark = new
+            {
+                operations = 1,
+
+                elapsedMilliseconds =
+                   stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
     });
 
 hybridApi.MapPost(
     "/history/redo",
     (HybridSpikeService service) =>
     {
-        if (!service.History.Redo(
-            service.Project))
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        var success =
+            service.History.Redo(
+                service.Project);
+
+        stopwatch.Stop();
+
+        if (!success)
         {
             return Results.Conflict(new
             {
@@ -1009,8 +1000,19 @@ hybridApi.MapPost(
             });
         }
 
-        return Results.Ok(
-            CreateHybridResponse(service));
+        return Results.Ok(new
+        {
+            state =
+               CreateHybridResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+
+                elapsedMilliseconds =
+                   stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
 
     });
 
@@ -1072,64 +1074,6 @@ hybridApi.MapPost(
 
         return Results.Ok(
             CreateHybridResponse(service));
-    });
-
-hybridApi.MapPost(
-    "/experiment/toggles/{count:int}",
-    (
-        int count,
-        HybridSpikeService service) =>
-    {
-        if (count is < 1 or > 10000)
-        {
-            return Results.BadRequest();
-        }
-
-        if (service.Project.ConfigItems.Count == 0)
-        {
-            return Results.BadRequest();
-        }
-
-        var stopwatch = Stopwatch.StartNew();
-
-        for (var i = 0; i < count; i++)
-        {
-            var index =
-                i % service.Project.ConfigItems.Count;
-
-            var item =
-                service.Project.ConfigItems[index];
-
-            var entry =
-                new HybridHistoryEntry(
-                    "Toggle Active",
-                    new PatchTransaction(
-                        [
-                        new ReplaceActivePatch(
-                            item.Id,
-                            item.Active,
-                            !item.Active)
-                        ]));
-            service.History.Execute(
-                service.Project,
-                entry);
-        }
-
-        stopwatch.Stop();
-
-        return Results.Ok(new
-        {
-            state =
-                CreateHybridResponse(service),
-
-            benchmark = new
-            {
-                operations = count,
-
-                elapsedMilliseconds =
-                    stopwatch.Elapsed.TotalMilliseconds
-            }
-        });
     });
 
 hybridApi.MapPost(

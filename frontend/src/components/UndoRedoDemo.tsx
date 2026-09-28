@@ -8,13 +8,12 @@ import {
   resetExperiment,
   runBulkToggle,
   runBulkDelete,
-  runToggleExperiment,
   toggleItem,
   undo,
 } from '../api/spikeApi'
 
 import type { Approach } from '../api/spikeApi'
-import type { SpikeState } from '../types'
+import type { ExperimentResponse, SpikeState } from '../types'
 
 type Props = {
   approach: Approach
@@ -34,8 +33,20 @@ function UndoRedoDemo({
   const [pending, setPending] =
     useState(false)
 
-  const [benchmarkMs, setBenchmarkMs] =
+  const [executeMs, setExecuteMs] =
     useState<number | null>(null)
+
+  const [undoMs, setUndoMs] =
+    useState<number | null>(null)
+
+  const [redoMs, setRedoMs] =
+    useState<number | null>(null)
+
+  const clearBenchmarks = () => {
+    setExecuteMs(null)
+    setUndoMs(null)
+    setRedoMs(null)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -76,6 +87,8 @@ function UndoRedoDemo({
       const data = await action()
 
       setState(data)
+
+      clearBenchmarks()
     } catch (err: unknown) {
       setError(
         err instanceof Error
@@ -87,6 +100,38 @@ function UndoRedoDemo({
     }
   }
 
+  const runHistoryAction = async (
+  action: () => Promise<ExperimentResponse>,
+  operation: 'undo' | 'redo',
+) => {
+  try {
+    setPending(true)
+    setError(null)
+
+    const result = await action()
+
+    setState(result.state)
+
+    if (operation === 'undo') {
+      setUndoMs(
+        result.benchmark.elapsedMilliseconds,
+      )
+    } else {
+      setRedoMs(
+        result.benchmark.elapsedMilliseconds,
+      )
+    }
+  } catch (err: unknown) {
+    setError(
+      err instanceof Error
+        ? err.message
+        : 'Unknown error',
+    )
+  } finally {
+    setPending(false)
+  }
+}
+  
   if (error && !state) {
     return (
       <div>
@@ -118,7 +163,8 @@ function UndoRedoDemo({
           type="button"
           disabled={pending || !state.canUndo}
           onClick={() =>
-            runAction(() => undo(approach))
+            runHistoryAction(() => undo(approach),
+          'undo')
           }
         >
           Undo
@@ -130,7 +176,8 @@ function UndoRedoDemo({
           type="button"
           disabled={pending || !state.canRedo}
           onClick={() =>
-            runAction(() => redo(approach))
+            runHistoryAction(() => redo(approach),
+          'redo')
           }
         >
           Redo
@@ -196,38 +243,6 @@ function UndoRedoDemo({
         {' '}
 
         <button
-          disabled={pending}
-          onClick={async () => {
-            try {
-              setPending(true)
-
-              const result =
-                await runToggleExperiment(
-                  approach,
-                  100,
-                )
-
-              setState(result.state)
-              setBenchmarkMs(
-                result.benchmark.elapsedMilliseconds,
-              )
-            } catch (err: unknown) {
-              setError(
-                err instanceof Error
-                  ? err.message
-                  : 'Unknown error',
-              )
-            } finally {
-              setPending(false)
-            }
-          }}
-        >
-          Run 100 Toggles
-        </button>
-
-        {' '}
-
-        <button
           disabled={
             pending ||
             state.projectState.configItems.length === 0
@@ -242,9 +257,11 @@ function UndoRedoDemo({
 
               setState(result.state)
 
-              setBenchmarkMs(
+              setExecuteMs(
                 result.benchmark.elapsedMilliseconds,
               )
+              setUndoMs(null)
+              setRedoMs(null)
             } catch (err: unknown) {
               setError(
                 err instanceof Error
@@ -276,9 +293,11 @@ function UndoRedoDemo({
 
               setState(result.state)
 
-              setBenchmarkMs(
+              setExecuteMs(
                 result.benchmark.elapsedMilliseconds,
               )
+              setUndoMs(null)
+              setRedoMs(null)
             } catch (err: unknown) {
               setError(
                 err instanceof Error
@@ -293,10 +312,32 @@ function UndoRedoDemo({
           Run Bulk Delete
         </button>
 
-        {benchmarkMs !== null && (
-          <p>
-            Last run: {benchmarkMs.toFixed(3)} ms
-          </p>
+        {(
+          executeMs !== null ||
+          undoMs !== null ||
+          redoMs !== null
+        ) && (
+          <div>
+            <h3>Benchmark</h3>
+
+            {executeMs !== null && (
+              <p>
+                Execute: {executeMs.toFixed(4)} ms
+              </p>
+            )}
+
+            {undoMs !== null && (
+              <p>
+                Undo: {undoMs.toFixed(4)} ms
+              </p>
+            )}
+
+            {redoMs !== null && (
+              <p>
+                Redo: {redoMs.toFixed(4)} ms
+              </p>
+            )}
+          </div>
         )}
       </section>
 
