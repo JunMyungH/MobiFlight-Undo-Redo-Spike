@@ -500,6 +500,9 @@ snapshotApi.MapPost(
             return Results.BadRequest();
         }
 
+        var stopwatch =
+            Stopwatch.StartNew();
+
         var selectedIds =
             service.Project.ConfigItems
                 .Where(item => item.Active)
@@ -513,9 +516,6 @@ snapshotApi.MapPost(
                     message = "No active ConfigItems to delete."
                 });
             }
-
-        var stopwatch =
-            Stopwatch.StartNew();
 
         service.History.Execute(
             service.Project,
@@ -989,6 +989,8 @@ hybridApi.MapPost(
         var success =
             service.History.Redo(
                 service.Project);
+
+        stopwatch.Stop();
 
         if (!success)
         {
