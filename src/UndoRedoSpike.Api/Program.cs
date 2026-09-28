@@ -122,7 +122,7 @@ commandApi.MapPost("/history/redo", (
         Stopwatch.StartNew();
 
     var success =
-        service.History.Undo();
+        service.History.Redo();
 
     stopwatch.Stop();
 
@@ -376,7 +376,7 @@ snapshotApi.MapPost(
         Stopwatch.StartNew();
 
         var success =
-            service.History.Undo(
+            service.History.Redo(
                 service.Project);
 
         stopwatch.Stop();
@@ -663,13 +663,12 @@ patchApi.MapPost(
         Stopwatch.StartNew();
 
         var success =
-            service.History.Undo(
+            service.History.Redo(
                 service.Project);
 
         stopwatch.Stop();
 
-        if (!service.History.Redo(
-            service.Project))
+        if (!success)
         {
             return Results.Conflict(new
             {
@@ -988,10 +987,10 @@ hybridApi.MapPost(
             Stopwatch.StartNew();
 
         var success =
-            service.History.Undo(
+            service.History.Redo(
                 service.Project);
 
-        if (success)
+        if (!success)
         {
             return Results.Conflict(new
             {

@@ -98,7 +98,7 @@ export async function runBulkToggle(
 ): Promise<ExperimentResponse> {
   return requestExperiment(
     approach,
-    '/experiment/bult-toggle',
+    '/experiment/bulk-toggle',
   )
 }
 
