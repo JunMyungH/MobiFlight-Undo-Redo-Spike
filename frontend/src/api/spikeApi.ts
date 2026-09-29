@@ -132,19 +132,19 @@ async function requestExperiment(
 }
 
 export function duplicateFirstItem(
-  appoach: Approach,
+  approach: Approach,
 ): Promise<ExperimentResponse> {
   return requestExperiment(
-    appoach,
+    approach,
     '/experiment/duplicate-first',
   )
 }
 
 export function moveFirstToLast(
-  appoach: Approach,
+  approach: Approach,
 ): Promise<ExperimentResponse> {
   return requestExperiment(
-    appoach,
+    approach,
     '/experiment/move-first-to-last',
   )
 }
