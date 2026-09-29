@@ -269,6 +269,75 @@ commandApi.MapPost(
         });
     });
 
+commandApi.MapPost(
+    "/experiment/duplicate-first",
+    (CommandSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count == 0) 
+        {
+            return Results.BadRequest();
+        }
+
+        var source =
+            service.Project.ConfigItems[0];
+
+        var stopwatch = Stopwatch.StartNew();
+
+        service.History.Execute(
+            new DuplicateConfigItemCommand(
+                service.Project,
+                source.Id));
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state = CreateCommandResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+                elapsedMilliseconds = stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
+
+commandApi.MapPost(
+    "/experiment/move-first-to-last",
+    (CommandSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count < 2)
+        {
+            return Results.BadRequest();
+        }
+
+        var item =
+            service.Project.ConfigItems[0];
+
+        var lastIndex =
+            service.Project.ConfigItems.Count - 1;
+
+        var stopwatch = Stopwatch.StartNew();
+
+        service.History.Execute(
+            new MoveConfigItemCommand(
+                service.Project,
+                item.Id,
+                0,
+                lastIndex));
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state = CreateCommandResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+                elapsedMilliseconds = stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
+
 var snapshotApi = app.MapGroup("/api/snapshot");
 
 snapshotApi.MapGet("/state", (
@@ -541,6 +610,81 @@ snapshotApi.MapPost(
             }
         });
     });
+
+snapshotApi.MapPost(
+    "/experiment/duplicate-first",
+    (SnapshotSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+
+        service.History.Execute(
+            service.Project,
+            project =>
+            {
+                var source = project.ConfigItems[0];
+                var copy = new ConfigItem
+                {
+                    Name = $"{source.Name} (Copy)",
+                    Active = source.Active
+                };
+                
+                project.ConfigItems.Insert(
+                    1, copy);
+            });
+
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state = CreateSnapshotResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+                elapsedMilliseconds = stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
+
+snapshotApi.MapPost(
+    "/experiment/move-first-to-last",
+    (SnapshotSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count < 2)
+        {
+            return Results.BadRequest();
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+
+        service.History.Execute(
+            service.Project,
+            project =>
+            {
+                var item = project.ConfigItems[0];
+                project.ConfigItems.RemoveAt(0);
+                project.ConfigItems.Add(item);
+            });
+
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state = CreateSnapshotResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+                elapsedMilliseconds = stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
+
 
 var patchApi = app.MapGroup("/api/patch");
 
@@ -862,6 +1006,86 @@ patchApi.MapPost(
             }
         });
     });
+
+patchApi.MapPost(
+    "/experiment/duplicate-first",
+    (PatchSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+        var source = service.Project.ConfigItems[0];
+        var copy = new ConfigItem
+        {
+            Name = $"{source.Name} (Copy)",
+            Active = source.Active
+        };
+        var stopwatch = Stopwatch.StartNew();
+        var transaction =
+            new PatchTransaction(
+            [
+                new AddConfigItemPatch(
+                    copy,
+                    1)
+            ]);
+
+        service.History.Execute(
+            service.Project,
+            transaction);
+
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state = CreatePatchResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+                elapsedMilliseconds = stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
+
+patchApi.MapPost(
+    "/experiment/move-first-to-last",
+    (PatchSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count < 2)
+        {
+            return Results.BadRequest();
+        }
+        var item = service.Project.ConfigItems[0];
+        var lastIndex = service.Project.ConfigItems.Count - 1;
+        var stopwatch = Stopwatch.StartNew();
+        var transaction =
+            new PatchTransaction(
+            [
+                new MoveConfigItemPatch(
+                    item.Id,
+                    0,
+                    lastIndex)
+            ]);
+
+        service.History.Execute(
+            service.Project,
+            transaction);
+
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state = CreatePatchResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+                elapsedMilliseconds = stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
+
 
 var hybridApi = app.MapGroup("/api/hybrid");
 
@@ -1192,6 +1416,90 @@ hybridApi.MapPost(
             }
         });
     });
+
+hybridApi.MapPost(
+    "/experiment/duplicate-first",
+    (HybridSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+        var source = service.Project.ConfigItems[0];
+        var copy = new ConfigItem
+        {
+            Name = $"{source.Name} (Copy)",
+            Active = source.Active
+        };
+        var stopwatch = Stopwatch.StartNew();
+        var entry =
+            new HybridHistoryEntry(
+                "Duplicate Config Item",
+                new PatchTransaction(
+            [
+                new AddConfigItemPatch(
+                    copy,
+                    1)
+            ]));
+
+        service.History.Execute(
+            service.Project,
+            entry);
+
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state = CreateHybridResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+                elapsedMilliseconds = stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
+
+hybridApi.MapPost(
+    "/experiment/move-first-to-last",
+    (HybridSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count < 2)
+        {
+            return Results.BadRequest();
+        }
+        var item = service.Project.ConfigItems[0];
+        var lastIndex = service.Project.ConfigItems.Count - 1;
+        var stopwatch = Stopwatch.StartNew();
+        var entry =
+            new HybridHistoryEntry(
+                "Move Config Item",
+                new PatchTransaction(
+            [
+                new MoveConfigItemPatch(
+                    item.Id,
+                    0,
+                    lastIndex)
+            ]));
+
+        service.History.Execute(
+            service.Project,
+            entry);
+
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state = CreateHybridResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+                elapsedMilliseconds = stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
+
 
 static object CreateCommandResponse(
     CommandSpikeService service)

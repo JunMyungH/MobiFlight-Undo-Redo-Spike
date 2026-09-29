@@ -10,6 +10,8 @@ import {
   runBulkDelete,
   toggleItem,
   undo,
+  duplicateFirstItem,
+  moveFirstToLast,
 } from '../api/spikeApi'
 
 import type { Approach } from '../api/spikeApi'
@@ -132,6 +134,34 @@ function UndoRedoDemo({
   }
 }
   
+  const runExperimentAction = async (
+  action: () => Promise<ExperimentResponse>,
+) => {
+  try {
+    setPending(true)
+    setError(null)
+
+    const result = await action()
+
+    setState(result.state)
+
+    setExecuteMs(
+      result.benchmark.elapsedMilliseconds,
+    )
+
+    setUndoMs(null)
+    setRedoMs(null)
+  } catch (err: unknown) {
+    setError(
+      err instanceof Error
+        ? err.message
+        : 'Unknown error',
+    )
+  } finally {
+    setPending(false)
+  }
+}
+
   if (error && !state) {
     return (
       <div>
@@ -247,31 +277,11 @@ function UndoRedoDemo({
             pending ||
             state.projectState.configItems.length === 0
           }
-          onClick={async () => {
-            try {
-              setPending(true)
-              setError(null)
-
-              const result =
-                await runBulkToggle(approach)
-
-              setState(result.state)
-
-              setExecuteMs(
-                result.benchmark.elapsedMilliseconds,
-              )
-              setUndoMs(null)
-              setRedoMs(null)
-            } catch (err: unknown) {
-              setError(
-                err instanceof Error
-                  ? err.message
-                  : 'Unknown error',
-              )
-            } finally {
-              setPending(false)
-            }
-          }}
+          onClick={() =>
+            runExperimentAction(
+              () => runBulkToggle(approach),
+            )
+          }
         >
           Run Bulk Toggle
         </button>
@@ -283,33 +293,45 @@ function UndoRedoDemo({
             pending ||
             state.projectState.configItems.length === 0
           }
-          onClick={async () => {
-            try {
-              setPending(true)
-              setError(null)
-
-              const result =
-                await runBulkDelete(approach)
-
-              setState(result.state)
-
-              setExecuteMs(
-                result.benchmark.elapsedMilliseconds,
-              )
-              setUndoMs(null)
-              setRedoMs(null)
-            } catch (err: unknown) {
-              setError(
-                err instanceof Error
-                  ? err.message
-                  : 'Unknown error',
-              )
-            } finally {
-              setPending(false)
-            }
-          }}
+          onClick={() =>
+            runExperimentAction(
+              () => runBulkDelete(approach),
+            )
+          }
         >
           Run Bulk Delete
+        </button>
+
+        {' '}
+
+        <button
+          disabled={
+            pending ||
+            state.projectState.configItems.length === 0
+          }
+          onClick={() =>
+            runExperimentAction(
+              () => duplicateFirstItem(approach),
+            )
+          }
+        >
+          Duplicate First Item
+        </button>
+
+        {' '}
+
+        <button
+          disabled={
+            pending ||
+            state.projectState.configItems.length < 2
+          }
+          onClick={() =>
+            runExperimentAction(
+              () => moveFirstToLast(approach),
+            )
+          }
+        >
+          Move First → Last
         </button>
 
         {(

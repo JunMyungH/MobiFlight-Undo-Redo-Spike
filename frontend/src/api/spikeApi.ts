@@ -130,3 +130,21 @@ async function requestExperiment(
 
   return response.json()
 }
+
+export function duplicateFirstItem(
+  appoach: Approach,
+): Promise<ExperimentResponse> {
+  return requestExperiment(
+    appoach,
+    '/experiment/duplicate-first',
+  )
+}
+
+export function moveFirstToLast(
+  appoach: Approach,
+): Promise<ExperimentResponse> {
+  return requestExperiment(
+    appoach,
+    '/experiment/move-first-to-last',
+  )
+}
