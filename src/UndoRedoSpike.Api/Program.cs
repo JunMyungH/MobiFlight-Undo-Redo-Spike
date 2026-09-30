@@ -1086,6 +1086,52 @@ patchApi.MapPost(
         });
     });
 
+patchApi.MapPost(
+    "/experiment/bulk-toggle-reference",
+    (PatchSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        var operations =
+            service.Project.ConfigItems
+                .Select(item =>
+                    (IPatchOperation)
+                    new ReplaceActiveReferencePatch(
+                        item,
+                        item.Active,
+                        !item.Active))
+                .ToList();
+
+        var transaction =
+            new PatchTransaction(
+                operations);
+
+        service.History.Execute(
+            service.Project,
+            transaction);
+
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state =
+                CreatePatchResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+
+                elapsedMilliseconds =
+                    stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
 
 var hybridApi = app.MapGroup("/api/hybrid");
 
@@ -1500,6 +1546,54 @@ hybridApi.MapPost(
         });
     });
 
+hybridApi.MapPost(
+    "/experiment/bulk-toggle-reference",
+    (HybridSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        var operations =
+            service.Project.ConfigItems
+                .Select(item =>
+                    (IPatchOperation)
+                    new ReplaceActiveReferencePatch(
+                        item,
+                        item.Active,
+                        !item.Active))
+                .ToList();
+
+        var entry =
+            new HybridHistoryEntry(
+                "Bulk Toggle (Direct Reference)",
+                new PatchTransaction(
+                    operations));
+
+        service.History.Execute(
+            service.Project,
+            entry);
+
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state =
+                CreateHybridResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+
+                elapsedMilliseconds =
+                    stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
 
 static object CreateCommandResponse(
     CommandSpikeService service)

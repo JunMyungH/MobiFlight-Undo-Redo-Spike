@@ -7,6 +7,7 @@ import {
   redo,
   resetExperiment,
   runBulkToggle,
+  runBulkToggleReference,
   runBulkDelete,
   toggleItem,
   undo,
@@ -285,6 +286,32 @@ function UndoRedoDemo({
         >
           Run Bulk Toggle
         </button>
+
+        {(
+          approach === 'patch' ||
+          approach === 'hybrid'
+        ) && (
+          <>
+            {' '}
+
+            <button
+              disabled={
+                pending ||
+                state.projectState.configItems.length === 0
+              }
+              onClick={() =>
+                runExperimentAction(
+                  () =>
+                    runBulkToggleReference(
+                      approach,
+                    ),
+                )
+              }
+            >
+              Run Bulk Toggle (Direct Ref)
+            </button>
+          </>
+        )}
 
         {' '}
 

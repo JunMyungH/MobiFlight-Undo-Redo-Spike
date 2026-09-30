@@ -148,3 +148,12 @@ export function moveFirstToLast(
     '/experiment/move-first-to-last',
   )
 }
+
+export function runBulkToggleReference(
+  approach: Approach,
+): Promise<ExperimentResponse> {
+  return requestExperiment(
+    approach,
+    '/experiment/bulk-toggle-reference',
+  )
+}
