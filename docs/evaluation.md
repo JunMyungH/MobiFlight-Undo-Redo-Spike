@@ -1,6 +1,6 @@
 # Undo/Redo Approach Evaluation
 
-This document summarizes the findings from the current Undo/Redo spike implementations.
+This document summarizes the findings from the current Undo/Redo spike implementations and the exploratory benchmark experiments performed so far.
 
 The evaluated approaches are:
 
@@ -29,17 +29,76 @@ It does not yet select between Patch and Snapshot representations depending on t
 | Ordering restoration | Must explicitly store and restore collection position when required | Collection order is contained in the snapshot | Explicitly represented by operations such as move or remove with stored index | Inherits explicit ordering restoration from the underlying patches |
 | Compound edits | Requires a dedicated command or additional command-specific state and logic | Naturally represented by one snapshot regardless of mutation complexity | Multiple reusable patches can be grouped into one PatchTransaction | Multiple patches are grouped into one semantic history entry |
 | Broad / bulk edits | One command can represent the complete user action, but the command must explicitly store all required reversal data | One full-state snapshot represents the whole bulk mutation | One transaction can contain many fine-grained patches | One semantic entry can contain many fine-grained patches |
+| Create / duplicate | Dedicated DuplicateConfigItemCommand stores the created item and insertion position | Generic mutation is captured by a full-state snapshot | AddConfigItemPatch stores the created item and insertion index | Semantic `Duplicate Config Item` entry delegates reversal to AddConfigItemPatch |
+| Move / reorder | Dedicated MoveConfigItemCommand stores item identity and source/target positions | Generic list mutation is captured by a full-state snapshot | MoveConfigItemPatch stores item identity and source/target positions | Semantic `Move Config Item` entry delegates reversal to MoveConfigItemPatch |
 | Draft handling | Not evaluated; current prototype records committed backend actions | Not evaluated; current prototype records committed backend actions | Not evaluated; current prototype records committed backend actions | Not evaluated; current prototype records committed backend actions |
 | Side effects | Not evaluated; current prototype only mutates ProjectState | Not evaluated; current prototype only restores ProjectState | Not evaluated; current prototype only represents ProjectState mutations | Not evaluated; current prototype only represents ProjectState mutations |
 | Memory implications | Primarily proportional to the reversal data required by each action | Proportional to snapshot scope × history depth; full-state prototype copies every ConfigItem for each entry | Primarily proportional to the number and size of stored patch operations | Similar to Patch plus semantic action metadata |
 | Implementation effort | Simple for small actions, but each new action may require a new command and custom Execute/Undo/Redo logic | Undo/Redo mechanism is generic, but requires cloning/restoration infrastructure | Requires reusable patch types and transaction handling; existing patches can be reused across actions | Adds semantic history abstraction around Patch; new actions can reuse existing patch types when applicable |
 | Extensibility | Strong semantic model, but action count can increase the number of command classes | New mutations generally require no new history type as long as the snapshot contains the affected state | New actions can compose existing operations, but new mutation kinds may require new patch types | New semantic actions can reuse existing patches; broader mutation strategies such as targeted Snapshot are not yet evaluated |
 
+## Current Mutation Coverage
+
+The spike now contains implementations for the following mutation patterns:
+
+```
+Update
+-> Toggle Active
+
+Delete
+-> Delete Config Item
+
+Compound
+-> Name + Active + Move
+
+Broad Update
+-> Bulk Toggle
+
+Broad Delete
+-> Bulk Delete
+
+Create
+-> Duplicate Config Item
+
+Move / Reorder
+-> Move First -> Last
+```
+
+Create and Move / Reorder are now represented in all four approaches. No performance conclusions are drawn for those two scenarios yet because the benchmark data in this document focuses on Toggle and Delete workloads.
+
+## Benchmark Methodology
+
+All timing measurements are exploratory spike measurements and should not be interpreted as production-grade performance benchmarks.
+
+The original Bulk Action measurements were collected five times per approach and operation. Several result sets contain clear warm-up/runtime outliers, especially in early measurements. For that reason, median values are used for comparison.
+
+A later Direct-Reference control experiment used two measurement procedures:
+
+1. five Execute measurements, followed by five Undo measurements, followed by five Redo measurements;
+2. repeated independent cycles of `Reset -> Execute -> Undo -> Redo`.
+
+The second procedure is considered the better methodology because each cycle starts from the same initial state and history depth. Therefore, the cycle-based medians are used as the primary Direct-Reference comparison. The sequential results are retained as supporting raw data.
+
+For future experiments, the preferred measurement procedure is:
+
+```
+1 unrecorded warm-up cycle
+-> Reset
+-> Execute
+-> Undo
+-> Redo
+
+then 10 measured cycles:
+Reset
+-> Execute
+-> Undo
+-> Redo
+-> record all three values
+```
+
+The median should remain the primary summary statistic.
+
 ## Performance Observations
-
-All timing results in this document are exploratory measurements from the spike and should not be interpreted as formal performance benchmarks.
-
-The bulk scenarios below were measured five times per approach and operation. Because several runs show clear warm-up/runtime noise, especially in the first measurement, the median is used for comparison.
 
 ### Earlier Individual Toggle Baseline
 
@@ -54,7 +113,7 @@ Median execution time:
 | Patch | 0.038 ms | 0.038 ms |
 | Hybrid | 0.070 ms | 0.042 ms |
 
-The relevant observation in this experiment was the effect of ProjectState size.
+The important observation was the effect of ProjectState size.
 
 The full-state Snapshot prototype cloned the complete ProjectState once for every individual Toggle action. Its cost therefore increased substantially as the state grew from 100 to 1000 ConfigItems.
 
@@ -70,8 +129,8 @@ Bulk Toggle changes the Active state of every ConfigItem but records the complet
 |---|---:|---:|---:|
 | Command | 0.0150 ms | 0.0065 ms | 0.0068 ms |
 | Snapshot | 0.0220 ms | 0.0300 ms | 0.0343 ms |
-| Patch | 0.0400 ms | 0.0412 ms | 0.0390 ms |
-| Hybrid | 0.0610 ms | 0.0433 ms | 0.0404 ms |
+| Patch - ID lookup | 0.0400 ms | 0.0412 ms | 0.0390 ms |
+| Hybrid - ID lookup | 0.0610 ms | 0.0433 ms | 0.0404 ms |
 
 #### 1000 Items - Median
 
@@ -79,18 +138,160 @@ Bulk Toggle changes the Active state of every ConfigItem but records the complet
 |---|---:|---:|---:|
 | Command | 0.0628 ms | 0.0333 ms | 0.0199 ms |
 | Snapshot | 0.0913 ms | 0.2571 ms | 0.2677 ms |
-| Patch | 1.7906 ms | 4.6173 ms | 4.3340 ms |
-| Hybrid | 1.8936 ms | 2.8551 ms | 1.8171 ms |
+| Patch - ID lookup | 1.7906 ms | 4.6173 ms | 4.3340 ms |
+| Hybrid - ID lookup | 1.8936 ms | 2.8551 ms | 1.8171 ms |
 
 The current Command implementation scales well for this scenario because BulkToggleCommand stores direct ConfigItem references and before/after values, then restores them with direct assignments.
 
-Snapshot behaves differently from the earlier individual-toggle experiment. A Bulk Toggle is one committed action, so the current implementation creates one complete ProjectState snapshot rather than one snapshot per item. This makes the full-state Snapshot approach comparatively competitive for this broad single action, even though it still copies the whole state.
+Snapshot behaves differently from the earlier individual-toggle experiment. A Bulk Toggle is one committed action, so the current implementation creates one complete ProjectState snapshot rather than one snapshot per item. This makes full-state Snapshot comparatively competitive for a broad single action even though it still copies the complete state.
 
-The current Patch and Hybrid implementations create one ReplaceActivePatch per ConfigItem. ReplaceActivePatch locates its target using a linear search through ProjectState.ConfigItems. As a result, a broad mutation can perform many repeated list searches. The observed scaling therefore reflects both the fine-grained patch representation and the current prototype's lookup strategy.
+The original Patch and Hybrid implementations create one ReplaceActivePatch per ConfigItem. ReplaceActivePatch locates its target by ID using a linear search through ProjectState.ConfigItems. A broad mutation therefore performs many repeated list searches.
 
-This result should not be interpreted as evidence that Patch-based Undo/Redo is inherently slow. The current implementation has an important algorithmic limitation that should be isolated in a later experiment.
+At this point, the original benchmark could not distinguish whether the observed cost came mainly from:
 
-### Bulk Delete
+```
+many Patch operations
+```
+
+or:
+
+```
+many Patch operations
++
+one linear target lookup per Patch
+```
+
+A control experiment was therefore added.
+
+## Direct-Reference Patch Control Experiment
+
+### Purpose
+
+ReplaceActiveReferencePatch keeps the same fine-grained representation:
+
+```
+one Patch operation per ConfigItem
+```
+
+but removes repeated ID lookup by storing a direct ConfigItem reference.
+
+Conceptually:
+
+```
+Original Patch
+Guid
+-> linear search through ConfigItems
+-> modify item
+
+Direct-Reference control
+ConfigItem reference
+-> modify item directly
+```
+
+This experiment is intended to isolate target-resolution cost. Direct object references are not yet proposed as the final production design because references can become stale if another history representation replaces object instances.
+
+### Primary Results - Independent Reset / Execute / Undo / Redo Cycles
+
+#### 100 Items
+
+| Approach | Execute | Undo | Redo |
+|---|---:|---:|---:|
+| Patch - direct reference | 0.0127 ms | 0.0081 ms | 0.0082 ms |
+| Hybrid - direct reference | 0.0151 ms | 0.0083 ms | 0.0086 ms |
+
+#### 1000 Items
+
+| Approach | Execute | Undo | Redo |
+|---|---:|---:|---:|
+| Patch - direct reference | 0.0470 ms | 0.0281 ms | 0.0286 ms |
+| Hybrid - direct reference | 0.0446 ms | 0.0274 ms | 0.0290 ms |
+
+### 1000-Item Comparison With Original ID Lookup
+
+| Approach | Execute | Undo | Redo |
+|---|---:|---:|---:|
+| Patch - ID lookup | 1.7906 ms | 4.6173 ms | 4.3340 ms |
+| Patch - direct reference | 0.0470 ms | 0.0281 ms | 0.0286 ms |
+| Hybrid - ID lookup | 1.8936 ms | 2.8551 ms | 1.8171 ms |
+| Hybrid - direct reference | 0.0446 ms | 0.0274 ms | 0.0290 ms |
+
+In this prototype, removing repeated linear lookup reduced the median 1000-item Patch timings by approximately:
+
+```
+Execute: 38x
+Undo:    164x
+Redo:    152x
+```
+
+For Hybrid, the corresponding differences were approximately:
+
+```
+Execute: 42x
+Undo:    104x
+Redo:     63x
+```
+
+These ratios describe this specific implementation and benchmark setup; they should not be generalized as universal speed-up factors.
+
+The stronger conclusion is algorithmic:
+
+> In the current prototype, repeated linear target lookup was the dominant cost in the original 1000-item Bulk Toggle implementation.
+
+Keeping 1000 fine-grained Patch operations while eliminating the linear lookup reduced the operation to roughly 0.03-0.05 ms in the cycle-based measurements.
+
+Therefore, the number of Patch operations alone did not explain the original millisecond-level results.
+
+### Comparison Against Command and Snapshot
+
+For the 1000-item Bulk Toggle:
+
+| Approach | Execute | Undo | Redo |
+|---|---:|---:|---:|
+| Command | 0.0628 ms | 0.0333 ms | 0.0199 ms |
+| Snapshot | 0.0913 ms | 0.2571 ms | 0.2677 ms |
+| Patch - direct reference | 0.0470 ms | 0.0281 ms | 0.0286 ms |
+| Hybrid - direct reference | 0.0446 ms | 0.0274 ms | 0.0290 ms |
+
+After removing the repeated lookup, Patch and Hybrid returned to the same small timing range as Command and were below Snapshot in this particular broad-toggle experiment.
+
+This changes the interpretation of the earlier Bulk Toggle benchmark.
+
+The earlier result does **not** support the conclusion:
+
+```
+Broad mutation
+-> Patch is inherently inefficient
+-> Snapshot should therefore be preferred
+```
+
+The evidence instead supports:
+
+```
+Broad mutation performance
+depends strongly on target-resolution strategy.
+
+Fine-grained Patch history can remain inexpensive
+when targets can be resolved efficiently.
+```
+
+### Why Direct References Are Only a Control
+
+Direct references provide a useful control because they eliminate lookup almost completely, but they introduce an important design risk.
+
+For example:
+
+```
+Patch stores reference to ConfigItem A
+-> another mechanism restores/clones ProjectState
+-> current ProjectState now contains ConfigItem A'
+-> stored reference still points to old ConfigItem A
+```
+
+This is especially relevant if a future Hybrid implementation mixes Patch and Snapshot entries.
+
+Therefore, the Direct-Reference Patch is evidence about lookup cost, not yet the preferred production representation.
+
+## Bulk Delete
 
 Bulk Delete removes all ConfigItems whose Active property is true. With the generated data used in the experiment, approximately half of the items are removed. The complete deletion is recorded as one history entry.
 
@@ -116,11 +317,11 @@ Bulk Delete exposes an important asymmetry between Undo and Redo in the current 
 
 For Patch and Hybrid, RemoveConfigItemPatch.Undo restores the stored ConfigItem directly at its stored index. This does not require locating the item first.
 
-By contrast, RemoveConfigItemPatch.Apply finds the item by ID before removing it. Bulk Delete Redo therefore repeats ID lookup and removal for many items. The Command implementation has a similar behavior in BulkDeleteCommand.Redo, where each deleted item is located again before removal.
+By contrast, RemoveConfigItemPatch.Apply finds the item by ID before removing it. Bulk Delete Redo therefore repeats ID lookup and removal for many items. The Command implementation has similar behavior in BulkDeleteCommand.Redo.
 
-The Snapshot implementation restores cloned ProjectState snapshots for both Undo and Redo. Its work is therefore comparatively uniform across the two directions in this scenario.
+The Snapshot implementation restores cloned ProjectState snapshots for both Undo and Redo, so its work is comparatively uniform across the two directions in this scenario.
 
-The current results show that performance is influenced not only by the history representation itself, but also by how individual operations locate and modify their targets.
+The Direct-Reference Bulk Toggle control strengthens the hypothesis that target resolution may also explain a significant part of the Bulk Delete Execute/Redo cost. However, Delete additionally performs list removal and element shifting, so this must be measured separately rather than assumed.
 
 ## Raw Bulk Measurements
 
@@ -204,6 +405,154 @@ Each row contains five measurements in milliseconds in execution order.
 | 1000 | Patch | 4.9678, 2.3710, 1.2086, 1.9467, 1.2381 |
 | 1000 | Hybrid | 1.3286, 3.7622, 1.2076, 1.2010, 3.3895 |
 
+## Raw Direct-Reference Measurements
+
+### Sequential Measurement Procedure
+
+In this procedure, five Execute measurements were taken consecutively, then five Undo measurements, then five Redo measurements.
+
+#### 100 Items - Patch Reference
+
+```
+Execute: 0.0159, 0.0151, 0.0198, 0.0176, 0.0238
+Undo:    0.4228, 0.0198, 0.0149, 0.0729, 0.0116
+Redo:    0.0097, 0.0105, 0.0134, 0.0755, 0.0099
+```
+
+Median:
+
+```
+Execute: 0.0176 ms
+Undo:    0.0198 ms
+Redo:    0.0105 ms
+```
+
+#### 100 Items - Hybrid Reference
+
+```
+Execute: 0.2098, 0.0173, 0.0262, 0.0227, 0.0133
+Undo:    0.1544, 0.0099, 0.0091, 0.0098, 0.0140
+Redo:    0.1002, 0.0125, 0.0092, 0.0104, 0.0103
+```
+
+Median:
+
+```
+Execute: 0.0227 ms
+Undo:    0.0099 ms
+Redo:    0.0104 ms
+```
+
+#### 1000 Items - Patch Reference
+
+```
+Execute: 0.0539, 0.1162, 0.0404, 0.0372, 0.0381
+Undo:    0.0273, 0.0223, 0.0246, 0.0391, 0.0226
+Redo:    0.0279, 0.0218, 0.0287, 0.0226, 0.0297
+```
+
+Median:
+
+```
+Execute: 0.0404 ms
+Undo:    0.0246 ms
+Redo:    0.0279 ms
+```
+
+#### 1000 Items - Hybrid Reference
+
+```
+Execute: 0.0514, 0.0420, 0.0378, 0.0639, 0.0453
+Undo:    0.0254, 0.0219, 0.0720, 0.0325, 0.0259
+Redo:    0.0295, 0.0277, 0.0307, 0.0291, 0.0204
+```
+
+Median:
+
+```
+Execute: 0.0453 ms
+Undo:    0.0259 ms
+Redo:    0.0291 ms
+```
+
+### Independent Cycle Measurement Procedure
+
+Each group below represents five independent `Reset -> Execute -> Undo -> Redo` cycles.
+
+#### 100 Items - Patch Reference
+
+```
+Cycle 1: Execute 0.0124 | Undo 0.0073 | Redo 0.0081
+Cycle 2: Execute 0.0150 | Undo 0.0124 | Redo 0.0082
+Cycle 3: Execute 0.1712 | Undo 0.0184 | Redo 0.0104
+Cycle 4: Execute 0.0116 | Undo 0.0081 | Redo 0.0077
+Cycle 5: Execute 0.0127 | Undo 0.0074 | Redo 0.0108
+```
+
+Median:
+
+```
+Execute: 0.0127 ms
+Undo:    0.0081 ms
+Redo:    0.0082 ms
+```
+
+#### 100 Items - Hybrid Reference
+
+```
+Cycle 1: Execute 0.0151 | Undo 0.0083 | Redo 0.0130
+Cycle 2: Execute 0.0114 | Undo 0.0094 | Redo 0.0080
+Cycle 3: Execute 0.0154 | Undo 0.0077 | Redo 0.0129
+Cycle 4: Execute 0.0125 | Undo 0.0077 | Redo 0.0086
+Cycle 5: Execute 0.0159 | Undo 0.0131 | Redo 0.0081
+```
+
+Median:
+
+```
+Execute: 0.0151 ms
+Undo:    0.0083 ms
+Redo:    0.0086 ms
+```
+
+#### 1000 Items - Patch Reference
+
+```
+Cycle 1: Execute 0.0482 | Undo 0.0241 | Redo 0.0265
+Cycle 2: Execute 0.0470 | Undo 0.0267 | Redo 0.0312
+Cycle 3: Execute 0.0578 | Undo 0.0391 | Redo 0.0288
+Cycle 4: Execute 0.0461 | Undo 0.0281 | Redo 0.0286
+Cycle 5: Execute 0.0452 | Undo 0.0305 | Redo 0.0206
+```
+
+Median:
+
+```
+Execute: 0.0470 ms
+Undo:    0.0281 ms
+Redo:    0.0286 ms
+```
+
+#### 1000 Items - Hybrid Reference
+
+```
+Cycle 1: Execute 0.0349 | Undo 0.0274 | Redo 0.0290
+Cycle 2: Execute 0.0446 | Undo 0.0311 | Redo 0.0316
+Cycle 3: Execute 0.0426 | Undo 0.0293 | Redo 0.0285
+Cycle 4: Execute 0.0448 | Undo 0.0271 | Redo 0.0239
+Cycle 5: Execute 0.0581 | Undo 0.0246 | Redo 0.0327
+```
+
+Median:
+
+```
+Execute: 0.0446 ms
+Undo:    0.0274 ms
+Redo:    0.0290 ms
+```
+
+The two procedures produce broadly similar 1000-item Direct-Reference results, which supports the lookup-cost interpretation. The independent-cycle procedure remains preferable for future comparisons.
+
 ## History Representation
 
 For the Compound Edit experiment, all approaches represented one committed user action as one Undo history entry.
@@ -232,17 +581,7 @@ Hybrid:
 Compound Edit [replace Name + replace Active + move ConfigItem]
 ```
 
-Command provides the clearest domain-level representation but requires action-specific reversal logic.
-
-Snapshot stores the previous state without requiring knowledge of the individual mutations, but does not preserve the semantic meaning of the action.
-
-Patch exposes the concrete mutations and allows existing operations to be composed into transactions.
-
-Hybrid retains both the semantic user action and the concrete Patch operations used to reverse it.
-
-For Bulk Actions, the same one-user-action / one-history-entry rule is retained.
-
-A Bulk Toggle of many items is represented as:
+For Bulk Toggle:
 
 Command:
 
@@ -268,7 +607,65 @@ Hybrid:
 Bulk Toggle [replace Active + replace Active + ...]
 ```
 
-This exposes a representation trade-off that was less visible in the localized experiments: a single broad semantic action can correspond to a large number of low-level Patch operations.
+For Duplicate:
+
+Command:
+
+```
+DuplicateConfigItemCommand
+```
+
+Snapshot:
+
+```
+ProjectState snapshot
+```
+
+Patch:
+
+```
+add ConfigItem
+```
+
+Hybrid:
+
+```
+Duplicate Config Item [add ConfigItem]
+```
+
+For Move / Reorder:
+
+Command:
+
+```
+MoveConfigItemCommand
+```
+
+Snapshot:
+
+```
+ProjectState snapshot
+```
+
+Patch:
+
+```
+move ConfigItem
+```
+
+Hybrid:
+
+```
+Move Config Item [move ConfigItem]
+```
+
+Command provides the clearest domain-level representation but requires action-specific reversal logic.
+
+Snapshot stores previous state without requiring knowledge of individual mutations but does not preserve the semantic meaning of the action.
+
+Patch exposes concrete mutations and allows reusable operations to be composed into transactions.
+
+Hybrid retains both the semantic user action and the concrete Patch operations used to reverse it.
 
 ## State Size and History Storage
 
@@ -284,11 +681,9 @@ For the earlier 100-individual-Toggle experiment:
 -> 100,000 stored ConfigItem copies
 ```
 
-This storage growth came from both state size and history depth: 100 committed actions produced 100 snapshots.
+This growth came from both state size and history depth: 100 committed actions produced 100 snapshots.
 
-For one Bulk Toggle, however, the history depth increases by only one entry.
-
-Therefore:
+For one Bulk Toggle, however:
 
 ```
 100 ConfigItems
@@ -298,77 +693,63 @@ Therefore:
 -> one snapshot containing 1000 ConfigItems
 ```
 
-This distinction is important. Snapshot cost depends on both snapshot scope and the number of committed history entries.
+Snapshot cost therefore depends on both snapshot scope and the number of committed history entries.
 
-The Command, Patch, and current Hybrid implementations do not store a complete copy of ProjectState for each action.
+Command, Patch, and current Hybrid do not store a complete ProjectState copy for each action. Their history storage is mainly related to the reversal data required for that mutation.
 
-Their history data is instead primarily related to the state required to reverse the mutation. For broad Patch/Hybrid actions, however, the number of stored low-level operations can grow with the number of affected items.
+For broad Patch/Hybrid actions, the number of low-level operations can grow with the number of affected items, but the Direct-Reference experiment shows that operation count alone did not create the earlier millisecond-level timing behavior.
+
+Formal byte-level memory measurements are still missing.
 
 ## Current Findings
 
 ### Command
 
-Command gives each history entry a clear domain meaning.
+Command gives each history entry clear domain meaning.
 
-This works naturally for small semantic actions such as Toggle Active and Delete Config Item.
+It works naturally for local semantic actions such as Toggle Active, Delete Config Item, Duplicate Config Item, and Move Config Item.
 
-The same model also represents Bulk Toggle and Bulk Delete as one semantic history entry.
+Bulk actions can also remain one semantic history entry.
 
-For Bulk Toggle, the current BulkToggleCommand stores direct ConfigItem references and before/after Active values. Execute, Undo, and Redo can therefore update those objects directly without searching ProjectState for every item.
+For Bulk Toggle, BulkToggleCommand stores direct ConfigItem references and before/after values, avoiding repeated target lookup during reversal.
 
-The main cost remains implementation complexity: each new action may require its own command class and its own Execute, Undo, and Redo logic.
+The main trade-off is implementation effort: new actions may require new command classes and custom Execute/Undo/Redo logic.
 
-CompoundEditCommand demonstrated that this logic grows as one action modifies more properties or collection positions.
+CompoundEditCommand demonstrates how action-specific state grows when one semantic action changes multiple properties and collection positions.
 
-BulkDeleteCommand also demonstrates that reversal implementation details matter. Undo can restore stored objects at stored indices, while Redo currently searches the collection for each deleted item before removing it again.
+BulkDeleteCommand also shows that implementation detail matters: Undo can restore stored items by index, while Redo currently searches again before removal.
 
 ### Snapshot
 
 Snapshot provides the most generic reversal mechanism in the current spike.
 
-A mutation can change multiple properties and collection positions without requiring operation-specific inverse logic.
+A mutation can affect several properties or collection positions without requiring action-specific inverse logic.
 
-The main disadvantages observed in the current full-state prototype are:
+Observed disadvantages of the current full-state implementation include:
 
 - storage grows with snapshot scope and history depth
-- restoring cloned state does not preserve object reference identity
-- history does not describe the semantic action that created the state
+- restore replaces object instances and therefore does not preserve C# reference identity
+- history does not describe semantic user intent
 
-The earlier individual-toggle benchmark showed significant cost when the whole ProjectState was cloned for every small action.
+The individual-toggle benchmark showed the cost of cloning complete state for every small action.
 
-The Bulk Action experiment adds an important counter-observation: when a broad mutation is represented as one committed action, only one full snapshot is required. For Bulk Toggle and Bulk Delete, this made the current Snapshot implementation comparatively competitive in execution time.
+The Bulk Action benchmark showed the opposite side of the trade-off: one broad action only creates one snapshot, making Snapshot comparatively competitive in that scenario.
 
-Snapshot scope therefore remains an important design decision.
-
-The current experiment only evaluates complete ProjectState snapshots.
+The current spike still evaluates only complete ProjectState snapshots; targeted snapshots have not yet been implemented.
 
 ### Patch
 
-Patch separates Undo/Redo from domain-specific command classes by representing mutations as reusable low-level operations.
+Patch represents mutations as reusable low-level operations that can be composed into one PatchTransaction.
 
-Existing operations can be composed into a PatchTransaction.
+The implementation demonstrates good composability and explicit transaction rollback behavior.
 
-For example:
+The original Bulk Toggle benchmark initially suggested poor scaling at 1000 items. The Direct-Reference control shows that this was dominated by repeated linear target lookup in ReplaceActivePatch rather than by the presence of 1000 Patch operations alone.
 
-```
-replace Name
-replace Active
-move ConfigItem
-```
+This is a significant finding because it changes the interpretation of the broad-mutation experiment.
 
-can form one Compound Edit transaction.
+Patch scalability cannot be evaluated fairly without controlling target-resolution complexity.
 
-The implementation also demonstrated that transaction failure handling requires explicit rollback logic so that partially applied or partially undone transactions do not leave ProjectState inconsistent.
-
-The Bulk Action experiment shows another trade-off: one semantic action may expand into many low-level patch operations.
-
-For Bulk Toggle, the current implementation creates one ReplaceActivePatch for every ConfigItem. ReplaceActivePatch currently performs a linear search by ID when it applies or undoes the change. This repeated lookup contributes strongly to the observed cost at 1000 items.
-
-For Bulk Delete, RemoveConfigItemPatch.Undo can restore the stored object directly at its stored index, while Apply locates the item before removal. This creates a visible difference between Undo and Redo cost.
-
-These results describe the current prototype implementation. They do not establish that Patch-based history is inherently slower than the other approaches.
-
-Patch history describes concrete mutations well, but does not by itself retain the semantic user intent behind those mutations.
+The next important Patch experiment should therefore preserve ID-based logical identity while replacing repeated linear search with efficient indexed lookup.
 
 ### Hybrid
 
@@ -376,26 +757,17 @@ The current Hybrid prototype combines:
 
 ```
 Semantic Action
-    +
++
 PatchTransaction
 ```
 
-For example:
+It retains readable user-level history while reusing Patch reversal primitives.
 
-```
-Compound Edit
-[replace Name + replace Active + move ConfigItem]
-```
+The Direct-Reference experiment produced nearly the same small timing range as Patch, showing that the semantic wrapper itself adds little measurable cost at this scale.
 
-This retains user-level semantic information while reusing the Patch-based reversal mechanism.
+Current Hybrid still uses PatchTransaction for all tested operations. A mixed Patch/Snapshot Hybrid is therefore still a hypothesis rather than an implemented result.
 
-For Bulk Actions, Hybrid retains one semantic entry such as `Bulk Toggle` or `Bulk Delete`, while the underlying transaction may contain many patch operations.
-
-This preserves readable history semantics, but the current Hybrid implementation also inherits the broad-operation behavior of the Patch prototype. In particular, Bulk Toggle still creates one ReplaceActivePatch per item and therefore inherits the repeated target-lookup cost.
-
-The current Hybrid implementation still uses PatchTransaction for every tested action.
-
-It has therefore not yet demonstrated whether different mutation patterns should use different history representations.
+The Direct-Reference control also weakens the earlier argument for moving broad actions directly to Snapshot solely for performance reasons. Before introducing a mixed representation based on performance, Patch should first be tested with efficient ID-based target resolution.
 
 ## Not Yet Evaluated
 
@@ -405,51 +777,269 @@ The following areas remain open:
 - Cancel / Escape behavior relative to Undo history
 - Native text-field Undo versus global Project Undo
 - Side effects outside ProjectState
-- Create operations
-- Larger Move / Reorder scenarios
 - Import / Merge-like mutations
 - Targeted Snapshot scope
 - Mixed Patch / Snapshot Hybrid history
-- Formal memory measurements
-- Formal performance benchmarking with warm-up and a larger number of measured runs
-- Patch/Hybrid performance with a more efficient target lookup strategy
+- Formal byte-level memory measurements
+- Production-like indexed target resolution
+- Bulk Delete with efficient target resolution
+- Formal benchmark procedure with warm-up and more measured cycles
 
-## Next Evaluation
+## Next Evaluation: Indexed ID Lookup
 
-The Bulk Action experiment provides evidence that mutation shape matters.
+The next experiment should test whether Patch can retain logical ID-based targeting without paying O(N) lookup cost for every operation.
 
-It also exposes two separate questions that should not be conflated:
-
-1. How much of the current Patch/Hybrid bulk cost comes from the history representation itself?
-2. How much comes from the prototype's repeated linear target lookup?
-
-A useful next step is therefore to isolate the lookup effect, for example by providing a more efficient way to resolve ConfigItems by ID, and then repeat the broad-mutation measurements.
-
-After that, the spike can evaluate a mixed Hybrid strategy such as:
+### Research Question
 
 ```
-Local / small mutation
--> Semantic Action + PatchTransaction
-
-Broad / complex mutation
--> Semantic Action + Targeted Snapshot
+Can Patch keep Guid-based logical identity
+while achieving timing close to the Direct-Reference control
+through O(1)-style indexed target resolution?
 ```
 
-This would allow the targeted Snapshot hypothesis to be compared against a less lookup-bound Patch implementation.
+This is more realistic than storing direct references permanently and provides a cleaner basis for deciding whether a mixed Snapshot/Patch Hybrid is actually needed.
 
-Create and larger Move / Reorder scenarios should also be added so that the comparison is not based only on property updates and deletions.
+### Step 1 - Add an Indexed Lookup Control
+
+Do not replace the existing ReplaceActivePatch yet.
+
+Add a separate experimental implementation, for example:
+
+```
+ReplaceActiveIndexedPatch
+```
+
+The experiment should keep:
+
+```
+Guid itemId
+before value
+after value
+```
+
+but resolve `itemId` through a dictionary/index instead of `FirstOrDefault`.
+
+A simple experimental resolver can be built once per Bulk Toggle action:
+
+```csharp
+var itemIndex =
+    service.Project.ConfigItems
+        .ToDictionary(
+            item => item.Id);
+```
+
+Then each indexed patch resolves:
+
+```csharp
+itemIndex[_itemId]
+```
+
+instead of scanning the List.
+
+This keeps the benchmark question narrow:
+
+```
+same number of Patch operations
++
+same Guid-based logical identity
++
+different target-resolution algorithm
+```
+
+### Step 2 - Keep the Existing Implementations
+
+Keep all three variants during the experiment:
+
+```
+ReplaceActivePatch
+-> Guid + linear List search
+
+ReplaceActiveReferencePatch
+-> direct object reference
+
+ReplaceActiveIndexedPatch
+-> Guid + dictionary lookup
+```
+
+Do not delete the original versions yet because they are useful baselines.
+
+### Step 3 - Add Separate Experimental Endpoints
+
+Recommended endpoints:
+
+```
+/api/patch/experiment/bulk-toggle-indexed
+/api/hybrid/experiment/bulk-toggle-indexed
+```
+
+The stopwatch scope must remain identical to the existing Bulk Toggle and Direct-Reference experiments.
+
+The indexed experiment should include index creation inside the measured section if the real action would need to construct that index for the operation.
+
+If a future production design maintains the index persistently in ProjectState, that should be benchmarked separately because it answers a different question.
+
+### Step 4 - Correctness Tests
+
+Before benchmarking, test:
+
+```
+Execute
+-> all Active values toggled
+
+Undo
+-> original values restored
+
+Redo
+-> toggled values restored
+
+History
+-> exactly one history entry
+
+Identity
+-> Guid-based target remains correct
+```
+
+Also test a missing ID and confirm that the Patch fails predictably.
+
+### Step 5 - Benchmark Method
+
+Use the improved independent-cycle procedure:
+
+```
+Warm-up:
+Reset
+-> Execute
+-> Undo
+-> Redo
+(do not record)
+
+Measured cycle x10:
+Reset
+-> Execute
+-> Undo
+-> Redo
+-> record all three
+```
+
+Run at:
+
+```
+100 items
+1000 items
+```
+
+Optionally add 10000 items after correctness is confirmed if the UI/runtime remains practical.
+
+Collect:
+
+```
+Patch - linear ID lookup
+Patch - direct reference
+Patch - indexed ID lookup
+
+Hybrid - linear ID lookup
+Hybrid - direct reference
+Hybrid - indexed ID lookup
+```
+
+Use medians as the primary comparison.
+
+### Step 6 - Decision Point
+
+If Indexed ID Lookup approaches Direct Reference:
+
+```
+Conclusion:
+the important problem was target resolution,
+not fine-grained Patch representation.
+
+Next:
+evaluate a maintainable ProjectState-level ID index/resolver
+and then revisit Bulk Delete.
+```
+
+If Indexed ID Lookup remains substantially slower:
+
+```
+Conclusion:
+additional Patch/transaction overhead is still material
+or index construction dominates the action.
+
+Next:
+separate index-construction cost from operation-execution cost,
+then compare against targeted Snapshot.
+```
+
+### Step 7 - Bulk Delete Follow-Up
+
+After indexed Bulk Toggle, apply the same reasoning to Bulk Delete.
+
+Bulk Delete is more complex because removal changes list structure and involves:
+
+```
+ID resolution
++
+RemoveAt
++
+element shifting
+```
+
+The goal is to determine how much of the existing Execute/Redo cost comes from lookup and how much comes from List mutation itself.
+
+Only after these lookup effects are isolated should performance be used as evidence for or against targeted Snapshot.
+
+## Longer-Term Decision Path
+
+The current evidence suggests the following experimental order:
+
+```
+1. Indexed ID lookup for Bulk Toggle
+        |
+        v
+2. Indexed / optimized target resolution for Bulk Delete
+        |
+        v
+3. Re-evaluate Patch performance and storage behavior
+        |
+        v
+4. Measure memory/history representation size
+        |
+        v
+5. Targeted Snapshot experiment
+        |
+        v
+6. Mixed Hybrid v2 evaluation
+```
+
+A future mixed Hybrid might still be useful for reasons other than raw speed, for example:
+
+- simpler representation of very broad or structurally complex changes
+- smaller implementation surface for mutations that are hard to express as patches
+- Import / Merge workflows
+- transaction boundaries that naturally correspond to state snapshots
+
+However, the current benchmark evidence does not justify selecting Snapshot for broad actions solely because the original Patch implementation was slower.
 
 ## Cross-Approach Observation
 
-The experiments increasingly indicate that the suitability of an Undo/Redo representation depends on the mutation pattern and the implementation strategy, rather than only on whether an approach can technically support an operation.
+The experiments increasingly show that the suitability of an Undo/Redo representation depends on several independent factors:
+
+```
+mutation shape
++
+history granularity
++
+target-resolution strategy
++
+state-copy scope
++
+identity requirements
++
+implementation complexity
+```
 
 Localized mutations favor compact reversal data.
 
-Broad single actions change the trade-off:
+Broad actions do not automatically favor Snapshot. The Direct-Reference control demonstrates that fine-grained Patch operations can remain inexpensive when target resolution is efficient.
 
-- Command can remain compact and efficient when it stores exactly the required references and values.
-- Snapshot pays for state capture, but only once per committed bulk action.
-- Patch can reuse generic operations, but a broad action may create many operations.
-- Hybrid preserves semantic meaning while currently inheriting the operation cost of Patch.
-
-The current results therefore support continued evaluation of a mixed representation strategy, while also showing that algorithmic details such as target lookup must be controlled before drawing performance conclusions.
+The next experiment should therefore preserve Patch semantics while improving lookup, so that the architectural comparison is not distorted by an avoidable O(N) search inside every Patch operation.
