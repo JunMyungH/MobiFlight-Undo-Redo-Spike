@@ -157,3 +157,21 @@ export function runBulkToggleReference(
     '/experiment/bulk-toggle-reference',
   )
 }
+
+export function runBulkToggleIndexed(
+  approach: Approach,
+): Promise<ExperimentResponse> {
+  return requestExperiment(
+    approach,
+    '/experiment/bulk-toggle-indexed',
+  )
+}
+
+export function runBulkDeleteIndexed(
+  approach: Approach,
+): Promise<ExperimentResponse> {
+  return requestExperiment(
+    approach,
+    '/experiment/bulk-delete-indexed',
+  )
+}

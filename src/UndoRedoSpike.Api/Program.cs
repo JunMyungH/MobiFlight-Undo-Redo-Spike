@@ -1133,6 +1133,126 @@ patchApi.MapPost(
         });
     });
 
+patchApi.MapPost(
+    "/experiment/bulk-toggle-indexed",
+    (PatchSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        var itemIndex =
+            service.Project.ConfigItems
+                .ToDictionary(
+                    item => item.Id);
+
+        var operations =
+            service.Project.ConfigItems
+                .Select(item =>
+                    (IPatchOperation)
+                    new ReplaceActiveIndexedPatch(
+                        itemIndex,
+                        item.Id,
+                        item.Active,
+                        !item.Active))
+                .ToList();
+
+        var transaction =
+            new PatchTransaction(
+                operations);
+
+        service.History.Execute(
+            service.Project,
+            transaction);
+
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state =
+                CreatePatchResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+
+                elapsedMilliseconds =
+                    stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
+
+patchApi.MapPost(
+    "/experiment/bulk-delete-indexed",
+    (PatchSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        var targets =
+            service.Project.ConfigItems
+                .Select((item, index) => new
+                {
+                    Item = item,
+                    Index = index
+                })
+                .Where(entry =>
+                    entry.Item.Active)
+                .OrderByDescending(
+                    entry => entry.Index)
+                .ToList();
+
+        if (targets.Count == 0)
+        {
+            return Results.BadRequest(new
+            {
+                message =
+                    "No active ConfigItems to delete."
+            });
+        }
+
+        var operations =
+            targets
+                .Select(entry =>
+                    (IPatchOperation)
+                    new RemoveConfigItemByIndexPatch(
+                        entry.Item,
+                        entry.Index))
+                .ToList();
+
+        var transaction =
+            new PatchTransaction(
+                operations);
+
+        service.History.Execute(
+            service.Project,
+            transaction);
+
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state =
+                CreatePatchResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+                elapsedMilliseconds =
+                    stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
+
 var hybridApi = app.MapGroup("/api/hybrid");
 
 hybridApi.MapGet(
@@ -1589,6 +1709,130 @@ hybridApi.MapPost(
             {
                 operations = 1,
 
+                elapsedMilliseconds =
+                    stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
+
+hybridApi.MapPost(
+    "/experiment/bulk-toggle-indexed",
+    (HybridSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        var itemIndex =
+            service.Project.ConfigItems
+                .ToDictionary(
+                    item => item.Id);
+
+        var operations =
+            service.Project.ConfigItems
+                .Select(item =>
+                    (IPatchOperation)
+                    new ReplaceActiveIndexedPatch(
+                        itemIndex,
+                        item.Id,
+                        item.Active,
+                        !item.Active))
+                .ToList();
+
+        var entry =
+            new HybridHistoryEntry(
+                "Bulk Toggle (Indexed Lookup)",
+                new PatchTransaction(
+                    operations));
+
+        service.History.Execute(
+            service.Project,
+            entry);
+
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state =
+                CreateHybridResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+
+                elapsedMilliseconds =
+                    stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
+
+hybridApi.MapPost(
+    "/experiment/bulk-delete-indexed",
+    (HybridSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        var targets =
+            service.Project.ConfigItems
+                .Select((item, index) => new
+                {
+                    Item = item,
+                    Index = index
+                })
+                .Where(entry =>
+                    entry.Item.Active)
+                .OrderByDescending(
+                    entry => entry.Index)
+                .ToList();
+
+        if (targets.Count == 0)
+        {
+            return Results.BadRequest(new
+            {
+                message =
+                    "No active ConfigItems to delete."
+            });
+        }
+
+        var operations =
+            targets
+                .Select(entry =>
+                    (IPatchOperation)
+                    new RemoveConfigItemByIndexPatch(
+                        entry.Item,
+                        entry.Index))
+                .ToList();
+
+        var entry =
+            new HybridHistoryEntry(
+                "Bulk Delete (Stored Index)",
+                new PatchTransaction(
+                    operations));
+
+        service.History.Execute(
+            service.Project,
+            entry);
+
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state =
+                CreateHybridResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
                 elapsedMilliseconds =
                     stopwatch.Elapsed.TotalMilliseconds
             }

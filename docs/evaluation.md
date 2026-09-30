@@ -98,6 +98,8 @@ Reset
 
 The median should remain the primary summary statistic.
 
+The later Indexed Lookup and Stored-Index Bulk Delete experiments used 10 measured independent cycles. Indexed Bulk Toggle includes dictionary construction in the Execute timing.
+
 ## Performance Observations
 
 ### Earlier Individual Toggle Baseline
@@ -291,9 +293,26 @@ This is especially relevant if a future Hybrid implementation mixes Patch and Sn
 
 Therefore, the Direct-Reference Patch is evidence about lookup cost, not yet the preferred production representation.
 
+## Indexed ID Lookup Control
+
+A follow-up experiment kept Guid-based logical identity but replaced repeated linear lookup with a dictionary-based lookup.
+
+Median results:
+
+| Items | Approach | Execute | Undo | Redo |
+|---:|---|---:|---:|---:|
+| 100 | Patch - indexed | 0.0254 ms | 0.0120 ms | 0.0136 ms |
+| 100 | Hybrid - indexed | 0.0210 ms | 0.0154 ms | 0.0102 ms |
+| 1000 | Patch - indexed | 0.0902 ms | 0.0477 ms | 0.0526 ms |
+| 1000 | Hybrid - indexed | 0.1114 ms | 0.0535 ms | 0.0521 ms |
+
+For 1000 items, indexed lookup is much faster than the original linear ID lookup while retaining Guid-based targeting. It is somewhat slower than direct references, which is expected because dictionary lookup adds overhead. Execute also includes the cost of creating the dictionary.
+
+This supports the conclusion that the poor scaling of the original Bulk Toggle Patch/Hybrid implementation was mainly caused by repeated linear target lookup rather than by the number of Patch operations itself.
+
 ## Bulk Delete
 
-Bulk Delete removes all ConfigItems whose Active property is true. With the generated data used in the experiment, approximately half of the items are removed. The complete deletion is recorded as one history entry.
+Bulk Delete removes all active ConfigItems and records the complete deletion as one history entry.
 
 #### 100 Items - Median
 
@@ -313,15 +332,18 @@ Bulk Delete removes all ConfigItems whose Active property is true. With the gene
 | Patch | 1.3968 ms | 0.0806 ms | 1.9467 ms |
 | Hybrid | 1.3031 ms | 0.0459 ms | 1.3286 ms |
 
-Bulk Delete exposes an important asymmetry between Undo and Redo in the current Command, Patch, and Hybrid implementations.
+The original Patch/Hybrid implementation searched the list by ID before every removal. A stored-index control removed that repeated search while preserving the same broad Delete action.
 
-For Patch and Hybrid, RemoveConfigItemPatch.Undo restores the stored ConfigItem directly at its stored index. This does not require locating the item first.
+#### 1000 Items - Stored Index Control
 
-By contrast, RemoveConfigItemPatch.Apply finds the item by ID before removing it. Bulk Delete Redo therefore repeats ID lookup and removal for many items. The Command implementation has similar behavior in BulkDeleteCommand.Redo.
+| Approach | Execute | Undo | Redo |
+|---|---:|---:|---:|
+| Patch - stored index | 0.2912 ms | 0.0616 ms | 0.0697 ms |
+| Hybrid - stored index | 0.2283 ms | 0.1110 ms | 0.0519 ms |
 
-The Snapshot implementation restores cloned ProjectState snapshots for both Undo and Redo, so its work is comparatively uniform across the two directions in this scenario.
+Removing repeated lookup greatly reduced Execute and especially Redo cost. Unlike Bulk Toggle, Bulk Delete still performs repeated `RemoveAt` / `Insert` operations, so collection mutation and element shifting remain part of the cost.
 
-The Direct-Reference Bulk Toggle control strengthens the hypothesis that target resolution may also explain a significant part of the Bulk Delete Execute/Redo cost. However, Delete additionally performs list removal and element shifting, so this must be measured separately rather than assumed.
+The Hybrid Undo median was higher in this run than in the earlier baseline, but the algorithm is still the same stored-index insertion path; this single difference is not treated as a separate architectural finding.
 
 ## Raw Bulk Measurements
 
@@ -739,35 +761,25 @@ The current spike still evaluates only complete ProjectState snapshots; targeted
 
 ### Patch
 
-Patch represents mutations as reusable low-level operations that can be composed into one PatchTransaction.
+Patch represents mutations as reusable low-level operations composed into a PatchTransaction.
 
-The implementation demonstrates good composability and explicit transaction rollback behavior.
+The original Bulk Toggle and Bulk Delete results were strongly affected by repeated linear target lookup. Direct-reference, indexed-ID, and stored-index controls showed that much of this cost can be removed without changing the one-action / one-history-entry model.
 
-The original Bulk Toggle benchmark initially suggested poor scaling at 1000 items. The Direct-Reference control shows that this was dominated by repeated linear target lookup in ReplaceActivePatch rather than by the presence of 1000 Patch operations alone.
+Indexed lookup is particularly relevant because it retains Guid-based logical identity while avoiding repeated full-list scans.
 
-This is a significant finding because it changes the interpretation of the broad-mutation experiment.
-
-Patch scalability cannot be evaluated fairly without controlling target-resolution complexity.
-
-The next important Patch experiment should therefore preserve ID-based logical identity while replacing repeated linear search with efficient indexed lookup.
+Patch still requires explicit mutation-specific operations, and structural list changes such as Bulk Delete retain collection-shifting cost even after lookup is improved.
 
 ### Hybrid
 
-The current Hybrid prototype combines:
+The current Hybrid prototype is still:
 
 ```
-Semantic Action
-+
-PatchTransaction
+Semantic Action + PatchTransaction
 ```
 
-It retains readable user-level history while reusing Patch reversal primitives.
+The benchmark controls show that its performance is largely inherited from the underlying Patch implementation; the semantic wrapper itself does not appear to be the main cost.
 
-The Direct-Reference experiment produced nearly the same small timing range as Patch, showing that the semantic wrapper itself adds little measurable cost at this scale.
-
-Current Hybrid still uses PatchTransaction for all tested operations. A mixed Patch/Snapshot Hybrid is therefore still a hypothesis rather than an implemented result.
-
-The Direct-Reference control also weakens the earlier argument for moving broad actions directly to Snapshot solely for performance reasons. Before introducing a mixed representation based on performance, Patch should first be tested with efficient ID-based target resolution.
+Hybrid has not yet demonstrated mixed history representations. The next useful step is therefore to let one semantic history support both Patch-backed and Snapshot-backed entries.
 
 ## Not Yet Evaluated
 
@@ -781,244 +793,36 @@ The following areas remain open:
 - Targeted Snapshot scope
 - Mixed Patch / Snapshot Hybrid history
 - Formal byte-level memory measurements
-- Production-like indexed target resolution
-- Bulk Delete with efficient target resolution
-- Formal benchmark procedure with warm-up and more measured cycles
+- Production-level persistent target resolver / index
 
-## Next Evaluation: Indexed ID Lookup
+## Next Evaluation: Hybrid v2
 
-The next experiment should test whether Patch can retain logical ID-based targeting without paying O(N) lookup cost for every operation.
+The lookup experiments are sufficient for the current spike. The next step is to test whether one Hybrid history can support more than one reversal representation.
 
-### Research Question
+Minimal Hybrid v2 target:
 
 ```
-Can Patch keep Guid-based logical identity
-while achieving timing close to the Direct-Reference control
-through O(1)-style indexed target resolution?
+Local / fine-grained mutation
+-> PatchTransaction
+
+Broad structural mutation
+-> Snapshot-backed entry
 ```
 
-This is more realistic than storing direct references permanently and provides a cleaner basis for deciding whether a mixed Snapshot/Patch Hybrid is actually needed.
+Bulk Delete is a useful first Snapshot-backed Hybrid action because the current experiments already show different trade-offs between Patch and Snapshot for that workload.
 
-### Step 1 - Add an Indexed Lookup Control
+The goal is not to declare Snapshot the best representation for Bulk Delete. The goal is to verify that one semantic Hybrid history can choose different reversal representations while keeping a single user-level Undo/Redo stack.
 
-Do not replace the existing ReplaceActivePatch yet.
+### Planned Steps
 
-Add a separate experimental implementation, for example:
+1. Introduce a common Hybrid history operation abstraction.
+2. Keep existing Patch-backed entries working unchanged.
+3. Add a Snapshot-backed Hybrid entry.
+4. Use Snapshot-backed history for one Bulk Delete experiment.
+5. Verify Execute / Undo / Redo correctness and one semantic history entry.
+6. Update the final evaluation with representation, identity, storage, and implementation trade-offs.
 
-```
-ReplaceActiveIndexedPatch
-```
-
-The experiment should keep:
-
-```
-Guid itemId
-before value
-after value
-```
-
-but resolve `itemId` through a dictionary/index instead of `FirstOrDefault`.
-
-A simple experimental resolver can be built once per Bulk Toggle action:
-
-```csharp
-var itemIndex =
-    service.Project.ConfigItems
-        .ToDictionary(
-            item => item.Id);
-```
-
-Then each indexed patch resolves:
-
-```csharp
-itemIndex[_itemId]
-```
-
-instead of scanning the List.
-
-This keeps the benchmark question narrow:
-
-```
-same number of Patch operations
-+
-same Guid-based logical identity
-+
-different target-resolution algorithm
-```
-
-### Step 2 - Keep the Existing Implementations
-
-Keep all three variants during the experiment:
-
-```
-ReplaceActivePatch
--> Guid + linear List search
-
-ReplaceActiveReferencePatch
--> direct object reference
-
-ReplaceActiveIndexedPatch
--> Guid + dictionary lookup
-```
-
-Do not delete the original versions yet because they are useful baselines.
-
-### Step 3 - Add Separate Experimental Endpoints
-
-Recommended endpoints:
-
-```
-/api/patch/experiment/bulk-toggle-indexed
-/api/hybrid/experiment/bulk-toggle-indexed
-```
-
-The stopwatch scope must remain identical to the existing Bulk Toggle and Direct-Reference experiments.
-
-The indexed experiment should include index creation inside the measured section if the real action would need to construct that index for the operation.
-
-If a future production design maintains the index persistently in ProjectState, that should be benchmarked separately because it answers a different question.
-
-### Step 4 - Correctness Tests
-
-Before benchmarking, test:
-
-```
-Execute
--> all Active values toggled
-
-Undo
--> original values restored
-
-Redo
--> toggled values restored
-
-History
--> exactly one history entry
-
-Identity
--> Guid-based target remains correct
-```
-
-Also test a missing ID and confirm that the Patch fails predictably.
-
-### Step 5 - Benchmark Method
-
-Use the improved independent-cycle procedure:
-
-```
-Warm-up:
-Reset
--> Execute
--> Undo
--> Redo
-(do not record)
-
-Measured cycle x10:
-Reset
--> Execute
--> Undo
--> Redo
--> record all three
-```
-
-Run at:
-
-```
-100 items
-1000 items
-```
-
-Optionally add 10000 items after correctness is confirmed if the UI/runtime remains practical.
-
-Collect:
-
-```
-Patch - linear ID lookup
-Patch - direct reference
-Patch - indexed ID lookup
-
-Hybrid - linear ID lookup
-Hybrid - direct reference
-Hybrid - indexed ID lookup
-```
-
-Use medians as the primary comparison.
-
-### Step 6 - Decision Point
-
-If Indexed ID Lookup approaches Direct Reference:
-
-```
-Conclusion:
-the important problem was target resolution,
-not fine-grained Patch representation.
-
-Next:
-evaluate a maintainable ProjectState-level ID index/resolver
-and then revisit Bulk Delete.
-```
-
-If Indexed ID Lookup remains substantially slower:
-
-```
-Conclusion:
-additional Patch/transaction overhead is still material
-or index construction dominates the action.
-
-Next:
-separate index-construction cost from operation-execution cost,
-then compare against targeted Snapshot.
-```
-
-### Step 7 - Bulk Delete Follow-Up
-
-After indexed Bulk Toggle, apply the same reasoning to Bulk Delete.
-
-Bulk Delete is more complex because removal changes list structure and involves:
-
-```
-ID resolution
-+
-RemoveAt
-+
-element shifting
-```
-
-The goal is to determine how much of the existing Execute/Redo cost comes from lookup and how much comes from List mutation itself.
-
-Only after these lookup effects are isolated should performance be used as evidence for or against targeted Snapshot.
-
-## Longer-Term Decision Path
-
-The current evidence suggests the following experimental order:
-
-```
-1. Indexed ID lookup for Bulk Toggle
-        |
-        v
-2. Indexed / optimized target resolution for Bulk Delete
-        |
-        v
-3. Re-evaluate Patch performance and storage behavior
-        |
-        v
-4. Measure memory/history representation size
-        |
-        v
-5. Targeted Snapshot experiment
-        |
-        v
-6. Mixed Hybrid v2 evaluation
-```
-
-A future mixed Hybrid might still be useful for reasons other than raw speed, for example:
-
-- simpler representation of very broad or structurally complex changes
-- smaller implementation surface for mutations that are hard to express as patches
-- Import / Merge workflows
-- transaction boundaries that naturally correspond to state snapshots
-
-However, the current benchmark evidence does not justify selecting Snapshot for broad actions solely because the original Patch implementation was slower.
+After Hybrid v2, the remaining high-value work is memory/history-size comparison and final documentation. Additional lookup microbenchmarks are not required unless a new implementation question appears.
 
 ## Cross-Approach Observation
 
@@ -1040,6 +844,6 @@ implementation complexity
 
 Localized mutations favor compact reversal data.
 
-Broad actions do not automatically favor Snapshot. The Direct-Reference control demonstrates that fine-grained Patch operations can remain inexpensive when target resolution is efficient.
+Broad actions do not automatically favor Snapshot. The direct-reference, indexed-ID, and stored-index controls show that implementation details such as target resolution can dominate benchmark results.
 
-The next experiment should therefore preserve Patch semantics while improving lookup, so that the architectural comparison is not distorted by an avoidable O(N) search inside every Patch operation.
+The next architectural question is therefore no longer lookup performance, but whether Hybrid can combine multiple reversal representations cleanly in one semantic history.
