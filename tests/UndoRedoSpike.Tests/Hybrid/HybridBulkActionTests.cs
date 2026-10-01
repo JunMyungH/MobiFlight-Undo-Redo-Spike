@@ -11,9 +11,12 @@ public class HybridBulkActionTests
             CreateBulkToggleEntry(
                 project);
 
+        var patchOperation =
+            (HybridPatchOperation)entry.Operation;
+
         Assert.AreEqual(
             5,
-            entry.Transaction.Operations.Count);
+            patchOperation.Transaction.Operations.Count);
 
         history.Execute(
             project,
@@ -144,9 +147,12 @@ public class HybridBulkActionTests
             CreateBulkDeleteEntry(
                 project);
 
+        var patchOperation =
+            (HybridPatchOperation)entry.Operation;
+
         Assert.AreEqual(
             3,
-            entry.Transaction.Operations.Count);
+            patchOperation.Transaction.Operations.Count);
 
         history.Execute(
             project,
