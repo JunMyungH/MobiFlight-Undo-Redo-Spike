@@ -10,6 +10,7 @@ import {
   runBulkToggleReference,
   runBulkToggleIndexed,
   runBulkDeleteIndexed,
+  runBulkDeleteSnapshot,
   runBulkDelete,
   toggleItem,
   undo,
@@ -331,6 +332,29 @@ function UndoRedoDemo({
           Run Bulk Delete
         </button>
         
+        {approach === 'hybrid' && (
+          <>
+            {' '}
+
+            <button
+              disabled={
+                pending ||
+                state.projectState.configItems.length === 0
+              }
+              onClick={() =>
+                runExperimentAction(
+                  () =>
+                    runBulkDeleteSnapshot(
+                      approach,
+                    ),
+                )
+              }
+            >
+              Run Bulk Delete (Snapshot)
+            </button>
+          </>
+        )}
+
         {' '}
         
         <button

@@ -2,34 +2,39 @@ public class HybridHistoryEntry
 {
     public string ActionName { get; }
 
-    public PatchTransaction Transaction { get; }
+    public IHybridHistoryOperation Operation { get; }
+
+    public HybridHistoryEntry(
+        string actionName,
+        IHybridHistoryOperation operation)
+    {
+        ActionName = actionName;
+        Operation = operation;
+    }
 
     public HybridHistoryEntry(
         string actionName,
         PatchTransaction transaction)
+        : this(
+            actionName,
+            new HybridPatchOperation(
+                transaction))
     {
-        ActionName = actionName;
-        Transaction = transaction;
     }
 
     public void Apply(ProjectState project)
     {
-        Transaction.Apply(project);
+        Operation.Apply(project);
     }
 
     public void Undo(ProjectState project)
     {
-        Transaction.Undo(project);
+        Operation.Undo(project);
     }
 
     public string Describe()
     {
-        var operations = string.Join(
-            " + ",
-            Transaction.Operations
-                .Select(operation =>
-                    operation.Description));
-
-        return $"{ActionName} [{operations}]";
+        return
+            $"{ActionName} [{Operation.Describe()}]";
     }
 }

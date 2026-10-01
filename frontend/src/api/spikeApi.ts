@@ -175,3 +175,12 @@ export function runBulkDeleteIndexed(
     '/experiment/bulk-delete-indexed',
   )
 }
+
+export function runBulkDeleteSnapshot(
+  approach: Approach,
+): Promise<ExperimentResponse> {
+  return requestExperiment(
+    approach,
+    '/experiment/bulk-delete-snapshot',
+  )
+}

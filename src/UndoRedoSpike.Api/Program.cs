@@ -1839,6 +1839,66 @@ hybridApi.MapPost(
         });
     });
 
+hybridApi.MapPost(
+    "/experiment/bulk-delete-snapshot",
+    (HybridSpikeService service) =>
+    {
+        if (service.Project.ConfigItems.Count == 0)
+        {
+            return Results.BadRequest();
+        }
+
+        var selectedIds =
+            service.Project.ConfigItems
+                .Where(item => item.Active)
+                .Select(item => item.Id)
+                .ToHashSet();
+
+        if (selectedIds.Count == 0)
+        {
+            return Results.BadRequest(new
+            {
+                message =
+                    "No active ConfigItems to delete."
+            });
+        }
+
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        var entry =
+            new HybridHistoryEntry(
+                "Bulk Delete",
+                new HybridSnapshotOperation(
+                    project =>
+                    {
+                        project.ConfigItems.RemoveAll(
+                            item =>
+                                selectedIds.Contains(
+                                    item.Id));
+                    }));
+
+        service.History.Execute(
+            service.Project,
+            entry);
+
+        stopwatch.Stop();
+
+        return Results.Ok(new
+        {
+            state =
+                CreateHybridResponse(service),
+
+            benchmark = new
+            {
+                operations = 1,
+
+                elapsedMilliseconds =
+                    stopwatch.Elapsed.TotalMilliseconds
+            }
+        });
+    });
+
 static object CreateCommandResponse(
     CommandSpikeService service)
 {
@@ -1948,7 +2008,7 @@ static object CreateHybridResponse(
         diagnostics = new
         {
             approach = "hybrid",
-            representation = "Semantic actions + generic patches",
+            representation = "Semantic actions + Patch/Snapshot strategies",
 
             undoEntries =
                 service.History.UndoCount,
