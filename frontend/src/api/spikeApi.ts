@@ -184,3 +184,23 @@ export function runBulkDeleteSnapshot(
     '/experiment/bulk-delete-snapshot',
   )
 }
+
+export function undoTo(
+  approach: Approach,
+  steps: number,
+): Promise<ExperimentResponse> {
+  return requestExperiment(
+    approach,
+    `/history/undo-to/${steps}`,
+  )
+}
+
+export function redoTo(
+  approach: Approach,
+  steps: number,
+): Promise<ExperimentResponse> {
+  return requestExperiment(
+    approach,
+    `/history/redo-to/${steps}`,
+  )
+}

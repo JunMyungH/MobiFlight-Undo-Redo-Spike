@@ -70,6 +70,89 @@ public class SnapshotHistory
         return true;
     }
 
+    public bool UndoTo(
+        ProjectState project,
+        int actionCount)
+        {
+            if (
+                actionCount < 1 ||
+                actionCount >
+                    _undoStack.Count)
+            {
+                return false;
+            }
+
+            var current =
+                project.Clone();
+
+            ProjectState? target =
+                null;
+
+            for (
+                var i = 0;
+                i < actionCount;
+                i++)
+            {
+                target =
+                    _undoStack.Pop();
+            }
+
+            if (target is null)
+            {
+                return false;
+            }
+
+            Restore(
+                project,
+                target);
+            _redoStack.Push(
+                current);
+
+            return true;
+        }
+
+        public bool RedoTo(
+            ProjectState project,
+            int actionCount)
+        {
+            if (
+                actionCount < 1 ||
+                actionCount >
+                    _redoStack.Count)
+            {
+                return false;
+            }
+
+            var current =
+                project.Clone();
+
+            ProjectState? target =
+                null;
+
+            for (
+                var i = 0;
+                i < actionCount;
+                i++)
+            {
+                target =
+                    _redoStack.Pop();
+            }
+
+            if (target is null)
+            {
+                return false;
+            }
+
+            Restore(
+                project,
+                target);
+
+            _undoStack.Push(
+                current);
+
+            return true;
+    }
+
     public void Clear()
     {
         _undoStack.Clear();

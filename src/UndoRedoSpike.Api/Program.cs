@@ -338,6 +338,112 @@ commandApi.MapPost(
         });
     });
 
+commandApi.MapPost(
+    "/history/undo-to/{steps:int}",
+    (
+        int steps,
+        CommandSpikeService service) =>
+    {
+        if (
+            steps < 1 ||
+            steps >
+                service.History.UndoCount)
+        {
+            return Results.BadRequest(
+                new
+                {
+                    message =
+                        "Invalid undo history target."
+                });
+        }
+
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        var success =
+            service.History.UndoTo(
+                steps);
+
+        stopwatch.Stop();
+
+        if (!success)
+        {
+            return Results.Conflict();
+        }
+
+        return Results.Ok(
+            new
+            {
+                state =
+                    CreateCommandResponse(
+                        service),
+
+                benchmark =
+                    new
+                    {
+                        operations =
+                            steps,
+
+                        elapsedMilliseconds =
+                            stopwatch.Elapsed
+                                .TotalMilliseconds
+                    }
+            });
+    });
+
+commandApi.MapPost(
+    "/history/redo-to/{steps:int}",
+    (
+        int steps,
+        CommandSpikeService service) =>
+    {
+        if (
+            steps < 1 ||
+            steps >
+                service.History.RedoCount)
+        {
+            return Results.BadRequest(
+                new
+                {
+                    message =
+                        "Invalid redo history target."
+                });
+        }
+
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        var success =
+            service.History.RedoTo(
+                steps);
+
+        stopwatch.Stop();
+
+        if (!success)
+        {
+            return Results.Conflict();
+        }
+
+        return Results.Ok(
+            new
+            {
+                state =
+                    CreateCommandResponse(
+                        service),
+
+                benchmark =
+                    new
+                    {
+                        operations =
+                            steps,
+
+                        elapsedMilliseconds =
+                            stopwatch.Elapsed
+                                .TotalMilliseconds
+                    }
+            });
+    });
+
 var snapshotApi = app.MapGroup("/api/snapshot");
 
 snapshotApi.MapGet("/state", (
@@ -685,6 +791,103 @@ snapshotApi.MapPost(
         });
     });
 
+snapshotApi.MapPost(
+    "/history/undo-to/{steps:int}",
+    (
+        int steps,
+        SnapshotSpikeService service) =>
+    {
+        if (
+            steps < 1 ||
+            steps >
+                service.History.UndoCount)
+        {
+            return Results.BadRequest();
+        }
+
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        var success =
+            service.History.UndoTo(
+                service.Project,
+                steps);
+
+        stopwatch.Stop();
+
+        if (!success)
+        {
+            return Results.Conflict();
+        }
+
+        return Results.Ok(
+            new
+            {
+                state =
+                    CreateSnapshotResponse(
+                        service),
+
+                benchmark =
+                    new
+                    {
+                        operations =
+                            steps,
+
+                        elapsedMilliseconds =
+                            stopwatch.Elapsed
+                                .TotalMilliseconds
+                    }
+            });
+    });
+
+snapshotApi.MapPost(
+    "/history/redo-to/{steps:int}",
+    (
+        int steps,
+        SnapshotSpikeService service) =>
+    {
+        if (
+            steps < 1 ||
+            steps >
+                service.History.RedoCount)
+        {
+            return Results.BadRequest();
+        }
+
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        var success =
+            service.History.RedoTo(
+                service.Project,
+                steps);
+
+        stopwatch.Stop();
+
+        if (!success)
+        {
+            return Results.Conflict();
+        }
+
+        return Results.Ok(
+            new
+            {
+                state =
+                    CreateSnapshotResponse(
+                        service),
+
+                benchmark =
+                    new
+                    {
+                        operations =
+                            steps,
+
+                        elapsedMilliseconds =
+                            stopwatch.Elapsed
+                                .TotalMilliseconds
+                    }
+            });
+    });
 
 var patchApi = app.MapGroup("/api/patch");
 
@@ -1251,6 +1454,102 @@ patchApi.MapPost(
                     stopwatch.Elapsed.TotalMilliseconds
             }
         });
+    });
+
+patchApi.MapPost(
+    "/history/undo-to/{steps:int}",
+    (
+        int steps,
+        PatchSpikeService service) =>
+    {
+        if (
+            steps < 1 ||
+            steps >
+                service.History.UndoCount)
+        {
+            return Results.BadRequest();
+        }
+
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        var success =
+            service.History.UndoTo(
+                service.Project,
+                steps);
+
+        stopwatch.Stop();
+
+        if (!success)
+        {
+            return Results.Conflict();
+        }
+
+        return Results.Ok(
+            new
+            {
+                state =
+                    CreatePatchResponse(service),
+
+                benchmark =
+                    new
+                    {
+                        operations =
+                            steps,
+
+                        elapsedMilliseconds =
+                            stopwatch.Elapsed
+                                .TotalMilliseconds
+                    }
+            });
+    });
+
+patchApi.MapPost(
+    "/history/redo-to/{steps:int}",
+    (
+        int steps,
+        PatchSpikeService service) =>
+    {
+        if (
+            steps < 1 ||
+            steps >
+                service.History.RedoCount)
+        {
+            return Results.BadRequest();
+        }
+
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        var success =
+            service.History.RedoTo(
+                service.Project,
+                steps);
+
+        stopwatch.Stop();
+
+        if (!success)
+        {
+            return Results.Conflict();
+        }
+
+        return Results.Ok(
+            new
+            {
+                state =
+                    CreatePatchResponse(service),
+
+                benchmark =
+                    new
+                    {
+                        operations =
+                            steps,
+
+                        elapsedMilliseconds =
+                            stopwatch.Elapsed
+                                .TotalMilliseconds
+                    }
+            });
     });
 
 var hybridApi = app.MapGroup("/api/hybrid");
@@ -1897,6 +2196,102 @@ hybridApi.MapPost(
                     stopwatch.Elapsed.TotalMilliseconds
             }
         });
+    });
+
+hybridApi.MapPost(
+    "/history/undo-to/{steps:int}",
+    (
+        int steps,
+        HybridSpikeService service) =>
+    {
+        if (
+            steps < 1 ||
+            steps >
+                service.History.UndoCount)
+        {
+            return Results.BadRequest();
+        }
+
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        var success =
+            service.History.UndoTo(
+                service.Project,
+                steps);
+
+        stopwatch.Stop();
+
+        if (!success)
+        {
+            return Results.Conflict();
+        }
+
+        return Results.Ok(
+            new
+            {
+                state =
+                    CreateHybridResponse(service),
+
+                benchmark =
+                    new
+                    {
+                        operations =
+                            steps,
+
+                        elapsedMilliseconds =
+                            stopwatch.Elapsed
+                                .TotalMilliseconds
+                    }
+            });
+    });
+
+hybridApi.MapPost(
+    "/history/redo-to/{steps:int}",
+    (
+        int steps,
+        HybridSpikeService service) =>
+    {
+        if (
+            steps < 1 ||
+            steps >
+                service.History.RedoCount)
+        {
+            return Results.BadRequest();
+        }
+
+        var stopwatch =
+            Stopwatch.StartNew();
+
+        var success =
+            service.History.RedoTo(
+                service.Project,
+                steps);
+
+        stopwatch.Stop();
+
+        if (!success)
+        {
+            return Results.Conflict();
+        }
+
+        return Results.Ok(
+            new
+            {
+                state =
+                    CreateHybridResponse(service),
+
+                benchmark =
+                    new
+                    {
+                        operations =
+                            steps,
+
+                        elapsedMilliseconds =
+                            stopwatch.Elapsed
+                                .TotalMilliseconds
+                    }
+            });
     });
 
 static object CreateCommandResponse(

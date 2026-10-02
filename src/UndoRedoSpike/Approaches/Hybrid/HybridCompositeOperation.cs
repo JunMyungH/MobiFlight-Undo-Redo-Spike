@@ -1,28 +1,20 @@
-public class PatchTransaction
+﻿public sealed class HybridCompositeOperation
+    : IHybridHistoryOperation
 {
-    private readonly List<IPatchOperation> _operations;
+    private readonly List<IHybridHistoryOperation> _operations;
 
-    public IReadOnlyList<IPatchOperation> Operations =>
-        _operations;
-
-    public string? Label { get; }
-
-    public PatchTransaction(
-        IEnumerable<IPatchOperation> operations,
-        string? label = null)
+    public HybridCompositeOperation(
+        IEnumerable<IHybridHistoryOperation> operations)
     {
         _operations =
             operations.ToList();
-
-        Label =
-            label;
     }
 
     public void Apply(
         ProjectState project)
     {
         var appliedOperations =
-            new Stack<IPatchOperation>();
+            new Stack<IHybridHistoryOperation>();
 
         try
         {
@@ -43,11 +35,9 @@ public class PatchTransaction
                 appliedOperations.Count >
                 0)
             {
-                var operation =
-                    appliedOperations.Pop();
-
-                operation.Undo(
-                    project);
+                appliedOperations
+                    .Pop()
+                    .Undo(project);
             }
 
             throw;
@@ -58,7 +48,7 @@ public class PatchTransaction
         ProjectState project)
     {
         var undoneOperations =
-            new Stack<IPatchOperation>();
+            new Stack<IHybridHistoryOperation>();
 
         try
         {
@@ -84,14 +74,18 @@ public class PatchTransaction
                 undoneOperations.Count >
                 0)
             {
-                var operation =
-                    undoneOperations.Pop();
-
-                operation.Apply(
-                    project);
+                undoneOperations
+                    .Pop()
+                    .Apply(project);
             }
 
             throw;
         }
+    }
+
+    public string Describe()
+    {
+        return
+            $"composite ({_operations.Count} history operations)";
     }
 }

@@ -11,6 +11,7 @@ import {
   getState,
   moveFirstToLast,
   redo,
+  redoTo,
   resetExperiment,
   runBulkDelete,
   runBulkDeleteIndexed,
@@ -20,6 +21,7 @@ import {
   runBulkToggleReference,
   toggleItem,
   undo,
+  undoTo,
 } from '../api/spikeApi'
 
 import type {
@@ -85,10 +87,19 @@ function UndoRedoDemo({
   const [redoMs, setRedoMs] =
     useState<number | null>(null)
 
+  const [undoOperations, setUndoOperations] =
+    useState<number | null>(null)
+
+  const [redoOperations, setRedoOperations] =
+    useState<number | null>(null)
+
   const clearBenchmarks = useCallback(() => {
     setExecuteMs(null)
     setUndoMs(null)
     setRedoMs(null)
+
+    setUndoOperations(null)
+    setRedoOperations(null)
   }, [])
 
   useEffect(() => {
@@ -166,10 +177,18 @@ function UndoRedoDemo({
             result.benchmark
               .elapsedMilliseconds,
           )
+
+          setUndoOperations(
+            result.benchmark.operations,
+          )
         } else {
           setRedoMs(
             result.benchmark
               .elapsedMilliseconds,
+          )
+
+          setRedoOperations(
+            result.benchmark.operations,
           )
         }
       } catch (err: unknown) {
@@ -205,6 +224,8 @@ function UndoRedoDemo({
 
         setUndoMs(null)
         setRedoMs(null)
+        setUndoOperations(null)
+        setRedoOperations(null)
       } catch (err: unknown) {
         setError(
           err instanceof Error
@@ -804,11 +825,13 @@ function UndoRedoDemo({
           <BenchmarkCard
             label="Undo"
             value={undoMs}
+            operations={undoOperations}
           />
 
           <BenchmarkCard
             label="Redo"
             value={redoMs}
+            operations={redoOperations}
           />
         </section>
       )}
@@ -956,6 +979,7 @@ function UndoRedoDemo({
 
           <p className="mt-1 text-xs text-slate-500">
             Inspect how the selected implementation stores undo and redo state.
+            Double-click a history entry to jump through that point as one grouped action.
           </p>
         </div>
 
@@ -1010,6 +1034,22 @@ function UndoRedoDemo({
                 .undoEntryDetails
             }
             accent="indigo"
+            disabled={pending}
+            onEntryDoubleClick={
+              (index) => {
+                const steps =
+                  index + 1
+
+                void runHistoryAction(
+                  () =>
+                    undoTo(
+                      approach,
+                      steps,
+                    ),
+                  "undo",
+                )
+              }
+            }
           />
 
           <HistoryStack
@@ -1019,6 +1059,22 @@ function UndoRedoDemo({
                 .redoEntryDetails
             }
             accent="cyan"
+            disabled={pending}
+            onEntryDoubleClick={
+              (index) => {
+                const steps =
+                  index + 1
+
+                void runHistoryAction(
+                  () =>
+                    redoTo(
+                      approach,
+                      steps,
+                    ),
+                  "redo",
+                )
+              }
+            }
           />
         </div>
       </section>
@@ -1035,17 +1091,30 @@ function UndoRedoDemo({
 type BenchmarkCardProps = {
   label: string
   value: number | null
+  operations?: number | null
 }
 
 function BenchmarkCard({
   label,
   value,
+  operations = null,
 }: BenchmarkCardProps) {
   return (
     <div className="rounded-2xl border border-white/10 bg-linear-to-br from-slate-900 to-slate-950 p-5">
-      <p className="text-xs font-medium tracking-wide text-slate-500 uppercase">
-        {label}
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium tracking-wide text-slate-500 uppercase">
+          {label}
+        </p>
+
+        {operations !== null && (
+          <span className="rounded-md border border-white/10 bg-slate-950 px-2 py-1 font-mono text-[10px] text-slate-500">
+            {operations}{' '}
+            {operations === 1
+              ? 'entry'
+              : 'entries'}
+          </span>
+        )}
+      </div>
 
       <div className="mt-3 flex items-end gap-2">
         <span className="font-mono text-2xl font-semibold tracking-tight text-white">
@@ -1112,12 +1181,18 @@ type HistoryStackProps = {
   title: string
   entries: string[]
   accent: 'indigo' | 'cyan'
+  disabled?: boolean
+  onEntryDoubleClick?: (
+    index: number,
+  ) => void
 }
 
 function HistoryStack({
   title,
   entries,
   accent,
+  disabled = false,
+  onEntryDoubleClick,
 }: HistoryStackProps) {
   const accentClass =
     accent === 'indigo'
@@ -1155,7 +1230,30 @@ function HistoryStack({
             ) => (
               <li
                 key={`${entry}-${index}`}
-                className="flex gap-3 rounded-lg border border-white/5 bg-slate-900/60 px-3 py-2.5"
+                onDoubleClick={() => {
+                  if (
+                    disabled ||
+                    !onEntryDoubleClick
+                  ) {
+                    return
+                  }
+
+                  onEntryDoubleClick(
+                    index,
+                  )
+                }}
+                title={
+                  onEntryDoubleClick
+                    ? "Double-click to jump through this history entry"
+                    : undefined
+                }
+                className={[
+                  "flex gap-3 rounded-lg border border-white/5 bg-slate-900/60 px-3 py-2.5 transition-all",
+                  onEntryDoubleClick &&
+                    !disabled
+                    ? "cursor-pointer select-none hover:border-indigo-400/25 hover:bg-indigo-500/5"
+                    : "",
+                ].join(" ")}
               >
                 <span className="shrink-0 font-mono text-[10px] text-slate-600">
                   {index + 1}
