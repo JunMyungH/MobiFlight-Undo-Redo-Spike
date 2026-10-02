@@ -8,6 +8,8 @@ public class HybridHistoryEntry
         GroupedEntries
     { get; }
 
+    public int ActionCount { get; }
+
     public bool IsHistoryJump =>
         GroupedEntries is not null;
 
@@ -20,6 +22,8 @@ public class HybridHistoryEntry
 
         Operation =
             operation;
+
+        ActionCount = 1;
     }
 
     private HybridHistoryEntry(
@@ -35,6 +39,11 @@ public class HybridHistoryEntry
 
         GroupedEntries =
             groupedEntries.ToList();
+
+        ActionCount =
+            GroupedEntries.Sum(
+                entry =>
+                    entry.ActionCount);
     }
 
     public HybridHistoryEntry(

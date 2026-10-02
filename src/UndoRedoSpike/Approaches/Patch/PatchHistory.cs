@@ -18,6 +18,18 @@ public class PatchHistory
     public int RedoCount =>
         _redoStack.Count;
 
+    public int NextUndoActionCount =>
+        _undoStack.TryPeek(
+            out var transaction)
+            ? transaction.ActionCount
+            : 0;
+
+    public int NextRedoActionCount =>
+        _redoStack.TryPeek(
+            out var transaction)
+            ? transaction.ActionCount
+            : 0;
+
     public IReadOnlyList<string> UndoEntryDetails =>
         _undoStack
             .Select(Describe)

@@ -17,6 +17,8 @@ public class PatchTransaction
 
     public string? Label { get; }
 
+    public int ActionCount { get; }
+
     public PatchTransaction(
         IEnumerable<IPatchOperation> operations,
         string? label = null)
@@ -26,6 +28,8 @@ public class PatchTransaction
 
         Label =
             label;
+
+        ActionCount = 1;
     }
 
     private PatchTransaction(
@@ -41,6 +45,11 @@ public class PatchTransaction
 
         _groupedTransactions =
             groupedTransactions.ToList();
+
+        ActionCount =
+            _groupedTransactions.Sum(
+                transaction =>
+                    transaction.ActionCount);
     }
 
     public static PatchTransaction CreateHistoryJump(

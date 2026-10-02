@@ -18,6 +18,27 @@ public class CommandHistory
     public int RedoCount =>
         _redoStack.Count;
 
+    public int NextUndoActionCount =>
+    _undoStack.TryPeek(
+        out var command)
+        ? GetActionCount(command)
+        : 0;
+
+    public int NextRedoActionCount =>
+        _redoStack.TryPeek(
+            out var command)
+            ? GetActionCount(command)
+            : 0;
+
+    private static int GetActionCount(
+        IUndoableCommand command)
+    {
+        return command is
+            CompositeHistoryCommand composite
+            ? composite.ActionCount
+            : 1;
+    }
+
     public IReadOnlyList<string> UndoEntryTypes =>
         _undoStack
             .Select(Describe)

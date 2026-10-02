@@ -86,6 +86,10 @@ commandApi.MapDelete("/config-items/{id:guid}", (
 commandApi.MapPost("/history/undo", (
     CommandSpikeService service) =>
 {
+    var operations =
+        service.History
+            .NextUndoActionCount;
+
     var stopwatch =
         Stopwatch.StartNew();
 
@@ -108,7 +112,7 @@ commandApi.MapPost("/history/undo", (
 
         benchmark = new
         {
-            operations = 1,
+            operations,
             elapsedMilliseconds =
                 stopwatch.Elapsed.TotalMilliseconds
         }
@@ -118,6 +122,10 @@ commandApi.MapPost("/history/undo", (
 commandApi.MapPost("/history/redo", (
     CommandSpikeService service) =>
 {
+    var operations =
+        service.History
+            .NextRedoActionCount;
+
     var stopwatch =
         Stopwatch.StartNew();
 
@@ -140,7 +148,7 @@ commandApi.MapPost("/history/redo", (
 
         benchmark = new
         {
-            operations = 1,
+            operations,
             elapsedMilliseconds =
                 stopwatch.Elapsed.TotalMilliseconds
         }

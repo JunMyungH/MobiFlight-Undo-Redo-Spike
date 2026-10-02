@@ -1037,6 +1037,16 @@ function UndoRedoDemo({
             disabled={pending}
             onEntryDoubleClick={
               (index) => {
+                if (index === 0) {
+                  void runHistoryAction(
+                    () =>
+                      undo(approach),
+                    "undo",
+                  )
+
+                  return
+                }
+
                 const steps =
                   index + 1
 
@@ -1062,6 +1072,16 @@ function UndoRedoDemo({
             disabled={pending}
             onEntryDoubleClick={
               (index) => {
+                if (index === 0) {
+                  void runHistoryAction(
+                    () =>
+                      redo(approach),
+                    "redo",
+                  )
+
+                  return
+                }
+
                 const steps =
                   index + 1
 
