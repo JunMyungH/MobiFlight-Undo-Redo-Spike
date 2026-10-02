@@ -4,12 +4,37 @@ public class HybridHistoryEntry
 
     public IHybridHistoryOperation Operation { get; }
 
+    public IReadOnlyList<HybridHistoryEntry>?
+        GroupedEntries
+    { get; }
+
+    public bool IsHistoryJump =>
+        GroupedEntries is not null;
+
     public HybridHistoryEntry(
         string actionName,
         IHybridHistoryOperation operation)
     {
-        ActionName = actionName;
-        Operation = operation;
+        ActionName =
+            actionName;
+
+        Operation =
+            operation;
+    }
+
+    private HybridHistoryEntry(
+        string actionName,
+        IHybridHistoryOperation operation,
+        IEnumerable<HybridHistoryEntry> groupedEntries)
+    {
+        ActionName =
+            actionName;
+
+        Operation =
+            operation;
+
+        GroupedEntries =
+            groupedEntries.ToList();
     }
 
     public HybridHistoryEntry(
@@ -22,18 +47,43 @@ public class HybridHistoryEntry
     {
     }
 
-    public void Apply(ProjectState project)
+    public static HybridHistoryEntry CreateHistoryJump(
+        IEnumerable<HybridHistoryEntry> entries,
+        string actionName)
     {
-        Operation.Apply(project);
+        var entryList =
+            entries.ToList();
+
+        return new HybridHistoryEntry(
+            actionName,
+            new HybridCompositeOperation(
+                entryList.Select(
+                    entry =>
+                        entry.Operation)),
+            entryList);
     }
 
-    public void Undo(ProjectState project)
+    public void Apply(
+        ProjectState project)
     {
-        Operation.Undo(project);
+        Operation.Apply(
+            project);
+    }
+
+    public void Undo(
+        ProjectState project)
+    {
+        Operation.Undo(
+            project);
     }
 
     public string Describe()
     {
+        if (IsHistoryJump)
+        {
+            return ActionName;
+        }
+
         return
             $"{ActionName} [{Operation.Describe()}]";
     }

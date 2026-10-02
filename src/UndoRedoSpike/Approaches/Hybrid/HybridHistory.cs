@@ -46,7 +46,7 @@ public class HybridHistory
     }
 
     public bool Undo(
-        ProjectState project)
+    ProjectState project)
     {
         if (_undoStack.Count == 0)
         {
@@ -54,20 +54,40 @@ public class HybridHistory
         }
 
         var entry =
-            _undoStack.Peek();
+            _undoStack.Pop();
 
         entry.Undo(
             project);
 
-        _undoStack.Pop();
-        _redoStack.Push(
-            entry);
+        if (
+            entry.IsHistoryJump &&
+            entry.GroupedEntries
+                is not null)
+        {
+            var originals =
+                entry.GroupedEntries;
+
+            for (
+                var i =
+                    originals.Count - 1;
+                i >= 0;
+                i--)
+            {
+                _redoStack.Push(
+                    originals[i]);
+            }
+        }
+        else
+        {
+            _redoStack.Push(
+                entry);
+        }
 
         return true;
     }
 
     public bool Redo(
-        ProjectState project)
+    ProjectState project)
     {
         if (_redoStack.Count == 0)
         {
@@ -75,14 +95,29 @@ public class HybridHistory
         }
 
         var entry =
-            _redoStack.Peek();
+            _redoStack.Pop();
 
         entry.Apply(
             project);
 
-        _redoStack.Pop();
-        _undoStack.Push(
-            entry);
+        if (
+            entry.IsHistoryJump &&
+            entry.GroupedEntries
+                is not null)
+        {
+            foreach (
+                var original in
+                entry.GroupedEntries)
+            {
+                _undoStack.Push(
+                    original);
+            }
+        }
+        else
+        {
+            _undoStack.Push(
+                entry);
+        }
 
         return true;
     }
@@ -121,16 +156,12 @@ public class HybridHistory
         entriesNewestFirst.Reverse();
 
         var groupedEntry =
-            new HybridHistoryEntry(
-                $"History Jump ({actionCount} actions)",
-                new HybridCompositeOperation(
-                    entriesNewestFirst
-                        .Select(
-                            entry =>
-                                entry.Operation)));
+            HybridHistoryEntry.CreateHistoryJump(
+                entriesNewestFirst,
+                $"History Jump ({actionCount} actions)");
 
-        _redoStack.Push(
-            groupedEntry);
+                _redoStack.Push(
+                    groupedEntry);
 
         return true;
     }
@@ -167,12 +198,9 @@ public class HybridHistory
         }
 
         var groupedEntry =
-            new HybridHistoryEntry(
-                $"History Jump ({actionCount} actions)",
-                new HybridCompositeOperation(
-                    entries.Select(
-                        entry =>
-                            entry.Operation)));
+            HybridHistoryEntry.CreateHistoryJump(
+                entries,
+                $"History Jump ({actionCount} actions)");
 
         _undoStack.Push(
             groupedEntry);

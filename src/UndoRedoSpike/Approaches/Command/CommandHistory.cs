@@ -49,7 +49,25 @@ public class CommandHistory
 
         command.Undo();
 
-        _redoStack.Push(command);
+        if (
+            command is
+                CompositeHistoryCommand composite)
+        {
+            for (
+                var i =
+                    composite.Commands.Count - 1;
+                i >= 0;
+                i--)
+            {
+                _redoStack.Push(
+                    composite.Commands[i]);
+            }
+        }
+        else
+        {
+            _redoStack.Push(
+                command);
+        }
 
         return true;
     }
@@ -66,7 +84,23 @@ public class CommandHistory
 
         command.Redo();
 
-        _undoStack.Push(command);
+        if (
+            command is
+                CompositeHistoryCommand composite)
+        {
+            foreach (
+                var originalCommand in
+                composite.Commands)
+            {
+                _undoStack.Push(
+                    originalCommand);
+            }
+        }
+        else
+        {
+            _undoStack.Push(
+                command);
+        }
 
         return true;
     }

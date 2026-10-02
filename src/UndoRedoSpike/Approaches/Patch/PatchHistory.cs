@@ -41,7 +41,7 @@ public class PatchHistory
     }
 
     public bool Undo(
-        ProjectState project)
+    ProjectState project)
     {
         if (_undoStack.Count == 0)
         {
@@ -49,20 +49,40 @@ public class PatchHistory
         }
 
         var transaction =
-            _undoStack.Peek();
+            _undoStack.Pop();
 
         transaction.Undo(
             project);
 
-        _undoStack.Pop();
-        _redoStack.Push(
-            transaction);
+        if (
+            transaction.IsHistoryJump &&
+            transaction.GroupedTransactions
+                is not null)
+        {
+            var originals =
+                transaction.GroupedTransactions;
+
+            for (
+                var i =
+                    originals.Count - 1;
+                i >= 0;
+                i--)
+            {
+                _redoStack.Push(
+                    originals[i]);
+            }
+        }
+        else
+        {
+            _redoStack.Push(
+                transaction);
+        }
 
         return true;
     }
 
     public bool Redo(
-        ProjectState project)
+    ProjectState project)
     {
         if (_redoStack.Count == 0)
         {
@@ -70,14 +90,29 @@ public class PatchHistory
         }
 
         var transaction =
-            _redoStack.Peek();
+            _redoStack.Pop();
 
         transaction.Apply(
             project);
 
-        _redoStack.Pop();
-        _undoStack.Push(
-            transaction);
+        if (
+            transaction.IsHistoryJump &&
+            transaction.GroupedTransactions
+                is not null)
+        {
+            foreach (
+                var original in
+                transaction.GroupedTransactions)
+            {
+                _undoStack.Push(
+                    original);
+            }
+        }
+        else
+        {
+            _undoStack.Push(
+                transaction);
+        }
 
         return true;
     }
@@ -116,11 +151,8 @@ public class PatchHistory
         transactionsNewestFirst.Reverse();
 
         var groupedTransaction =
-            new PatchTransaction(
-                transactionsNewestFirst
-                    .SelectMany(
-                        transaction =>
-                            transaction.Operations),
+            PatchTransaction.CreateHistoryJump(
+                transactionsNewestFirst,
                 $"History Jump ({actionCount} actions)");
 
         _redoStack.Push(
@@ -161,15 +193,12 @@ public class PatchHistory
         }
 
         var groupedTransaction =
-            new PatchTransaction(
-                transactions
-                    .SelectMany(
-                        transaction =>
-                            transaction.Operations),
+            PatchTransaction.CreateHistoryJump(
+                transactions,
                 $"History Jump ({actionCount} actions)");
 
-        _undoStack.Push(
-            groupedTransaction);
+                _undoStack.Push(
+                    groupedTransaction);
 
         return true;
     }

@@ -2343,16 +2343,12 @@ static object CreateSnapshotResponse(
             redoEntries = service.History.RedoCount,
 
             undoEntryDetails =
-                service.History.UndoSnapshotSizes
-                    .Select(count =>
-                        $"ProjectState snapshot ({count} ConfigItems)")
-                    .ToArray(),
+                service.History
+                    .UndoEntryDetails,
 
             redoEntryDetails =
-                service.History.RedoSnapshotSizes
-                    .Select(count =>
-                        $"ProjectState snapshot ({count} ConfigItems)")
-                    .ToArray(),
+                service.History
+                    .RedoEntryDetails,
 
             storedConfigItemCopies =
                 (int?)service.History.StoredConfigItemCopies

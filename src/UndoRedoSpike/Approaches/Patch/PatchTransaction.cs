@@ -2,8 +2,18 @@ public class PatchTransaction
 {
     private readonly List<IPatchOperation> _operations;
 
+    private readonly List<PatchTransaction>?
+        _groupedTransactions;
+
     public IReadOnlyList<IPatchOperation> Operations =>
         _operations;
+
+    public IReadOnlyList<PatchTransaction>?
+        GroupedTransactions =>
+            _groupedTransactions;
+
+    public bool IsHistoryJump =>
+        _groupedTransactions is not null;
 
     public string? Label { get; }
 
@@ -16,6 +26,36 @@ public class PatchTransaction
 
         Label =
             label;
+    }
+
+    private PatchTransaction(
+        IEnumerable<IPatchOperation> operations,
+        string label,
+        IEnumerable<PatchTransaction> groupedTransactions)
+    {
+        _operations =
+            operations.ToList();
+
+        Label =
+            label;
+
+        _groupedTransactions =
+            groupedTransactions.ToList();
+    }
+
+    public static PatchTransaction CreateHistoryJump(
+        IEnumerable<PatchTransaction> transactions,
+        string label)
+    {
+        var transactionList =
+            transactions.ToList();
+
+        return new PatchTransaction(
+            transactionList.SelectMany(
+                transaction =>
+                    transaction.Operations),
+            label,
+            transactionList);
     }
 
     public void Apply(

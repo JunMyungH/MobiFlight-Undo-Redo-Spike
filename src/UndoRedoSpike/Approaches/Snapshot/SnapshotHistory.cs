@@ -1,71 +1,140 @@
 public class SnapshotHistory
 {
-    private readonly Stack<ProjectState> _undoStack = new();
-    private readonly Stack<ProjectState> _redoStack = new();
+    private readonly Stack<SnapshotHistoryEntry>
+        _undoStack = new();
 
-    public bool CanUndo => _undoStack.Count > 0;
-    public bool CanRedo => _redoStack.Count > 0;
+    private readonly Stack<SnapshotHistoryEntry>
+        _redoStack = new();
 
-    public int UndoCount => _undoStack.Count;
-    public int RedoCount => _redoStack.Count;
+    public bool CanUndo =>
+        _undoStack.Count > 0;
 
-    public IReadOnlyList<int> UndoSnapshotSizes =>
-    _undoStack
-        .Select(snapshot => snapshot.ConfigItems.Count)
-        .ToList();
+    public bool CanRedo =>
+        _redoStack.Count > 0;
 
-    public IReadOnlyList<int> RedoSnapshotSizes =>
+    public int UndoCount =>
+        _undoStack.Count;
+
+    public int RedoCount =>
+        _redoStack.Count;
+
+    public IReadOnlyList<string> UndoEntryDetails =>
+        _undoStack
+            .Select(
+                entry =>
+                    entry.Describe())
+            .ToList();
+
+    public IReadOnlyList<string> RedoEntryDetails =>
         _redoStack
-            .Select(snapshot => snapshot.ConfigItems.Count)
+            .Select(
+                entry =>
+                    entry.Describe())
             .ToList();
 
     public int StoredConfigItemCopies =>
-        _undoStack.Sum(snapshot => snapshot.ConfigItems.Count)
-        + _redoStack.Sum(snapshot => snapshot.ConfigItems.Count);
+        _undoStack.Sum(
+            entry =>
+                entry.StoredConfigItemCopies)
+        +
+        _redoStack.Sum(
+            entry =>
+                entry.StoredConfigItemCopies);
 
-    public void Execute(ProjectState project, Action<ProjectState> mutation)
+    public void Execute(
+        ProjectState project,
+        Action<ProjectState> mutation)
     {
-        var before = project.Clone();
+        var before =
+            project.Clone();
 
         mutation(project);
 
-        _undoStack.Push(before);
+        _undoStack.Push(
+            SnapshotHistoryEntry.Single(
+                before));
+
         _redoStack.Clear();
     }
 
-    private static void Restore(ProjectState target, ProjectState snapshot)
-    {
-        target.ConfigItems = snapshot.ConfigItems
-            .Select(item => item.Clone())
-            .ToList();
-    }
-
-    public bool Undo(ProjectState project)
+    public bool Undo(
+        ProjectState project)
     {
         if (_undoStack.Count == 0)
+        {
             return false;
+        }
 
-        var current = project.Clone();
-        var previous = _undoStack.Pop();
+        var entry =
+            _undoStack.Pop();
 
-        Restore(project, previous);
+        if (
+            entry.IsHistoryJump &&
+            entry.GroupedEntries
+                is not null)
+        {
+            Restore(
+                project,
+                entry.Snapshot);
 
-        _redoStack.Push(current);
+            RestoreEntries(
+                _redoStack,
+                entry.GroupedEntries);
+
+            return true;
+        }
+
+        var current =
+            project.Clone();
+
+        Restore(
+            project,
+            entry.Snapshot);
+
+        _redoStack.Push(
+            SnapshotHistoryEntry.Single(
+                current));
 
         return true;
     }
 
-    public bool Redo(ProjectState project)
+    public bool Redo(
+        ProjectState project)
     {
         if (_redoStack.Count == 0)
+        {
             return false;
+        }
 
-        var current = project.Clone();
-        var next = _redoStack.Pop();
+        var entry =
+            _redoStack.Pop();
 
-        Restore(project, next);
+        if (
+            entry.IsHistoryJump &&
+            entry.GroupedEntries
+                is not null)
+        {
+            Restore(
+                project,
+                entry.Snapshot);
 
-        _undoStack.Push(current);
+            RestoreEntries(
+                _undoStack,
+                entry.GroupedEntries);
+
+            return true;
+        }
+
+        var current =
+            project.Clone();
+
+        Restore(
+            project,
+            entry.Snapshot);
+
+        _undoStack.Push(
+            SnapshotHistoryEntry.Single(
+                current));
 
         return true;
     }
@@ -73,89 +142,137 @@ public class SnapshotHistory
     public bool UndoTo(
         ProjectState project,
         int actionCount)
+    {
+        if (
+            actionCount < 1 ||
+            actionCount >
+                _undoStack.Count)
         {
-            if (
-                actionCount < 1 ||
-                actionCount >
-                    _undoStack.Count)
-            {
-                return false;
-            }
-
-            var current =
-                project.Clone();
-
-            ProjectState? target =
-                null;
-
-            for (
-                var i = 0;
-                i < actionCount;
-                i++)
-            {
-                target =
-                    _undoStack.Pop();
-            }
-
-            if (target is null)
-            {
-                return false;
-            }
-
-            Restore(
-                project,
-                target);
-            _redoStack.Push(
-                current);
-
-            return true;
+            return false;
         }
 
-        public bool RedoTo(
-            ProjectState project,
-            int actionCount)
+        var current =
+            project.Clone();
+
+        var removedEntries =
+            new List<SnapshotHistoryEntry>(
+                actionCount);
+
+        SnapshotHistoryEntry? target =
+            null;
+
+        for (
+            var i = 0;
+            i < actionCount;
+            i++)
         {
-            if (
-                actionCount < 1 ||
-                actionCount >
-                    _redoStack.Count)
-            {
-                return false;
-            }
+            target =
+                _undoStack.Pop();
 
-            var current =
-                project.Clone();
-
-            ProjectState? target =
-                null;
-
-            for (
-                var i = 0;
-                i < actionCount;
-                i++)
-            {
-                target =
-                    _redoStack.Pop();
-            }
-
-            if (target is null)
-            {
-                return false;
-            }
-
-            Restore(
-                project,
+            removedEntries.Add(
                 target);
+        }
 
-            _undoStack.Push(
-                current);
+        if (target is null)
+        {
+            return false;
+        }
 
-            return true;
+        Restore(
+            project,
+            target.Snapshot);
+
+        _redoStack.Push(
+            SnapshotHistoryEntry.HistoryJump(
+                current,
+                removedEntries,
+                actionCount));
+
+        return true;
+    }
+
+    public bool RedoTo(
+        ProjectState project,
+        int actionCount)
+    {
+        if (
+            actionCount < 1 ||
+            actionCount >
+                _redoStack.Count)
+        {
+            return false;
+        }
+
+        var current =
+            project.Clone();
+
+        var removedEntries =
+            new List<SnapshotHistoryEntry>(
+                actionCount);
+
+        SnapshotHistoryEntry? target =
+            null;
+
+        for (
+            var i = 0;
+            i < actionCount;
+            i++)
+        {
+            target =
+                _redoStack.Pop();
+
+            removedEntries.Add(
+                target);
+        }
+
+        if (target is null)
+        {
+            return false;
+        }
+
+        Restore(
+            project,
+            target.Snapshot);
+
+        _undoStack.Push(
+            SnapshotHistoryEntry.HistoryJump(
+                current,
+                removedEntries,
+                actionCount));
+
+        return true;
     }
 
     public void Clear()
     {
         _undoStack.Clear();
         _redoStack.Clear();
+    }
+
+    private static void RestoreEntries(
+        Stack<SnapshotHistoryEntry> targetStack,
+        IReadOnlyList<SnapshotHistoryEntry> entriesNewestFirst)
+    {
+        for (
+            var i =
+                entriesNewestFirst.Count - 1;
+            i >= 0;
+            i--)
+        {
+            targetStack.Push(
+                entriesNewestFirst[i]);
+        }
+    }
+
+    private static void Restore(
+        ProjectState target,
+        ProjectState snapshot)
+    {
+        target.ConfigItems =
+            snapshot.ConfigItems
+                .Select(
+                    item =>
+                        item.Clone())
+                .ToList();
     }
 }

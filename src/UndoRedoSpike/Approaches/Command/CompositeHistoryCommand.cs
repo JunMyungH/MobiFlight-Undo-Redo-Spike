@@ -3,6 +3,9 @@
 {
     private readonly List<IUndoableCommand> _commands;
 
+    public IReadOnlyList<IUndoableCommand> Commands =>
+        _commands;
+
     public string Description { get; }
 
     public int ActionCount =>
@@ -26,10 +29,11 @@
 
     public void Undo()
     {
-        for (var i =
-             _commands.Count - 1;
-             i >= 0;
-             i--)
+        for (
+            var i =
+                _commands.Count - 1;
+            i >= 0;
+            i--)
         {
             _commands[i].Undo();
         }
@@ -37,7 +41,9 @@
 
     public void Redo()
     {
-        foreach (var command in _commands)
+        foreach (
+            var command in
+            _commands)
         {
             command.Redo();
         }
