@@ -61,10 +61,12 @@ public class PatchHistory
         }
 
         var transaction =
-            _undoStack.Pop();
+            _undoStack.Peek();
 
         transaction.Undo(
             project);
+
+        _undoStack.Pop();
 
         if (
             transaction.IsHistoryJump &&
@@ -102,10 +104,12 @@ public class PatchHistory
         }
 
         var transaction =
-            _redoStack.Pop();
+            _redoStack.Peek();
 
         transaction.Apply(
             project);
+
+        _redoStack.Pop();
 
         if (
             transaction.IsHistoryJump &&

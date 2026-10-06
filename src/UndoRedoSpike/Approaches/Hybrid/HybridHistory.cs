@@ -66,10 +66,12 @@ public class HybridHistory
         }
 
         var entry =
-            _undoStack.Pop();
+            _undoStack.Peek();
 
         entry.Undo(
             project);
+
+        _undoStack.Pop();
 
         if (
             entry.IsHistoryJump &&
@@ -107,10 +109,12 @@ public class HybridHistory
         }
 
         var entry =
-            _redoStack.Pop();
+            _redoStack.Peek();
 
         entry.Apply(
             project);
+
+        _redoStack.Pop();
 
         if (
             entry.IsHistoryJump &&
