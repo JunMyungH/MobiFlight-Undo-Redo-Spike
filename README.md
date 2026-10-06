@@ -29,16 +29,28 @@ Other Action Catalog patterns such as Create, Move/Reorder, Compound Edit, and I
 ## Structure
 
 `src/UndoRedoSpike`
-- Simplified domain model and Undo/Redo prototypes
+- Simplified domain model and Undo/Redo implementations
+- Command, Snapshot, Patch, and Hybrid approaches
+
+`src/UndoRedoSpike.Api`
+- .NET API exposing the spike operations to the frontend
+- Undo, Redo, bulk experiments, and history navigation endpoints
+
+`frontend`
+- React + TypeScript frontend
+- Interactive comparison of all four approaches
+- Keyboard Undo/Redo shortcuts
+- History Inspector with multi-step history navigation
 
 `tests/UndoRedoSpike.Tests`
-- MSTest tests for each approach
+- MSTest coverage for all approaches
+- State restoration, failure rollback, compound actions, History Jump, nested History Jump, and Hybrid Patch/Snapshot mixing
 
 `docs/spike-plan.md`
 - Scope and evaluation plan
 
 `docs/evaluation.md`
-- Comparison results
+- Comparison results and current architectural recommendation
 
 ### Questions
 - Where should history live?
@@ -55,3 +67,13 @@ Other Action Catalog patterns such as Create, Move/Reorder, Compound Edit, and I
 - Testability
 - Memory/state cost
 - MVP feasibility
+
+### Current Result
+
+The architecture comparison currently favors a Hybrid approach:
+
+- Patch-backed history entries for localized and identity-sensitive changes
+- Snapshot-backed entries for selected broad or structurally complex changes
+- One semantic history entry per committed user action
+- Persistent IDs rather than direct object references for Patch target resolution
+- History navigation implemented independently from the underlying history representation

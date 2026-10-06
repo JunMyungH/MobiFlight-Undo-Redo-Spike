@@ -286,14 +286,119 @@ The spike also supports defining history at the **committed user-action level**.
 
 ---
 
-## 8. Remaining Questions for Production Integration
+## 8. History Navigation Experiment
+
+The prototype also evaluated Photoshop-style history navigation.
+
+The frontend exposes the current Undo and Redo stacks through the
+History Inspector. A user can select an earlier or later history
+entry and move through several entries at once.
+
+This is implemented through:
+
+```
+UndoTo(n)
+RedoTo(n)
+```
+
+The selected history entries are temporarily represented as one grouped History Jump entry.
+
+Example:
+
+```
+Action A
+Action B
+Action C
+    |
+    | UndoTo(2)
+    v
+Action A
+Redo:
+History Jump (2 actions)
+```
+
+
+Redoing the grouped entry restores B and C and expands them back into their original individual history entries.
+
+The same mechanism was implemented and tested for:
+
+- Command
+- Snapshot
+- Patch
+- Hybrid
+
+History Jump entries preserve their semantic action count even when an existing History Jump is included in another jump.
+
+For example:
+
+```
+Action A
+History Jump (2 actions)
+```
+
+grouped together represents:
+
+```
+History Jump (3 actions)
+```
+
+rather than two actions.
+
+### Failure Handling
+
+Multi-step history navigation must be atomic.
+
+A failure while executing one operation in `UndoTo` or `RedoTo` must not leave either the ProjectState or the history stacks in a partially modified state.
+
+The Patch and Hybrid implementations therefore:
+
+1. inspect the target history entries without modifying the stack,
+2. execute the requested Undo or Redo operations,
+3. roll back already completed operations if a later operation fails,
+4. modify the history stacks only after the complete jump succeeds.
+
+This behavior is covered by tests for failed multi-step Undo and Redo.
+
+### Hybrid History Navigation
+
+History navigation was also tested with Patch-backed and Snapshot-backed entries mixed in the same Hybrid history.
+
+For example:
+
+```
+Patch-backed Toggle
+-> Snapshot-backed Delete
+-> Patch-backed Rename
+-> UndoTo(3)
+-> Redo grouped History Jump
+```
+
+The sequence restores the expected ProjectState even though the Snapshot operation replaces object instances.
+
+This reinforces the earlier finding that Patch operations should resolve their targets by persistent logical ID rather than relying on long-lived direct object references.
+
+### Finding
+
+History navigation is primarily a UX capability layered on top of the history mechanism.
+
+It does not materially change the architectural comparison between Command, Snapshot, Patch, and Hybrid.
+
+The experiment therefore does not change the main recommendation:
+
+> Hybrid history with Patch as the default reversal strategy and
+> Snapshot available for selected broad changes remains the strongest
+> direction demonstrated by this spike.
+
+---
+
+## 9. Remaining Questions for Production Integration
 
 The main architectural spike is complete. The following topics still require product-level decisions in MobiFlight:
 
 - Where a user action begins and commits
 - Draft edits versus committed global Undo
 - Cancel / Escape behavior
-- Native text-field Ctrl+Z versus global project Undo
+- Production integration of native text-field Ctrl+Z versus global project Undo
 - Side effects outside ProjectState
 - Production-level persistent ID resolver/index
 - Reference-identity requirements across Snapshot restores
