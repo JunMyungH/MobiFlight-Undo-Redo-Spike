@@ -168,4 +168,207 @@ public class SnapshotHistoryTests
         Assert.IsFalse(history.CanRedo);
         Assert.AreEqual(0, history.RedoCount);
     }
+
+    [TestMethod]
+    public void UndoTo_GroupsMultipleActionsAndRedoRestoresThem()
+    {
+        var project =
+            new ProjectState
+            {
+                ConfigItems =
+                [
+                    new ConfigItem
+                {
+                    Name = "First",
+                    Active = false
+                },
+                new ConfigItem
+                {
+                    Name = "Second",
+                    Active = false
+                },
+                new ConfigItem
+                {
+                    Name = "Third",
+                    Active = false
+                }
+                ]
+            };
+
+        var history =
+            new SnapshotHistory();
+
+        history.Execute(
+            project,
+            state =>
+            {
+                state.ConfigItems[0].Active =
+                    true;
+            });
+
+        history.Execute(
+            project,
+            state =>
+            {
+                state.ConfigItems[1].Active =
+                    true;
+            });
+
+        history.Execute(
+            project,
+            state =>
+            {
+                state.ConfigItems[2].Active =
+                    true;
+            });
+
+        var success =
+            history.UndoTo(
+                project,
+                2);
+
+        Assert.IsTrue(success);
+
+        Assert.IsTrue(
+            project.ConfigItems[0].Active);
+
+        Assert.IsFalse(
+            project.ConfigItems[1].Active);
+
+        Assert.IsFalse(
+            project.ConfigItems[2].Active);
+
+        Assert.AreEqual(
+            1,
+            history.UndoCount);
+
+        Assert.AreEqual(
+            1,
+            history.RedoCount);
+
+        Assert.AreEqual(
+            "History Jump (2 actions)",
+            history.RedoEntryDetails[0]);
+
+        history.Redo(project);
+
+        Assert.IsTrue(
+            project.ConfigItems[0].Active);
+
+        Assert.IsTrue(
+            project.ConfigItems[1].Active);
+
+        Assert.IsTrue(
+            project.ConfigItems[2].Active);
+
+        Assert.AreEqual(
+            3,
+            history.UndoCount);
+
+        Assert.AreEqual(
+            0,
+            history.RedoCount);
+    }
+
+    [TestMethod]
+    public void NestedHistoryJump_UsesSemanticActionCount()
+    {
+        var project =
+            new ProjectState
+            {
+                ConfigItems =
+                [
+                    new ConfigItem
+                {
+                    Name = "First",
+                    Active = false
+                },
+                new ConfigItem
+                {
+                    Name = "Second",
+                    Active = false
+                },
+                new ConfigItem
+                {
+                    Name = "Third",
+                    Active = false
+                }
+                ]
+            };
+
+        var history =
+            new SnapshotHistory();
+
+        history.Execute(
+            project,
+            state =>
+            {
+                state.ConfigItems[0]
+                    .Active = true;
+            });
+
+        history.Execute(
+            project,
+            state =>
+            {
+                state.ConfigItems[1]
+                    .Active = true;
+            });
+
+        history.Execute(
+            project,
+            state =>
+            {
+                state.ConfigItems[2]
+                    .Active = true;
+            });
+
+        history.UndoTo(
+            project,
+            2);
+
+        Assert.AreEqual(
+            "History Jump (2 actions)",
+            history.RedoEntryDetails[0]);
+
+        history.Undo(
+            project);
+
+        Assert.AreEqual(
+            0,
+            history.UndoCount);
+
+        Assert.AreEqual(
+            2,
+            history.RedoCount);
+
+        history.RedoTo(
+            project,
+            2);
+
+        Assert.IsTrue(
+            project.ConfigItems[0].Active);
+
+        Assert.IsTrue(
+            project.ConfigItems[1].Active);
+
+        Assert.IsTrue(
+            project.ConfigItems[2].Active);
+
+        Assert.AreEqual(
+            1,
+            history.UndoCount);
+
+        Assert.AreEqual(
+            0,
+            history.RedoCount);
+
+        Assert.AreEqual(
+            3,
+            history.NextUndoActionCount);
+
+        Assert.AreEqual(
+            "History Jump (3 actions)",
+            history.UndoEntryDetails[0]);
+    }
 }

@@ -37,12 +37,19 @@
 
     public static SnapshotHistoryEntry HistoryJump(
         ProjectState destination,
-        IEnumerable<SnapshotHistoryEntry> originalEntries,
-        int actionCount)
+        IEnumerable<SnapshotHistoryEntry> originalEntries)
     {
+        var entryList =
+            originalEntries.ToList();
+
+        var actionCount =
+            entryList.Sum(
+                entry =>
+                    entry.ActionCount);
+
         return new SnapshotHistoryEntry(
             destination,
-            originalEntries.ToList(),
+            entryList,
             actionCount);
     }
 

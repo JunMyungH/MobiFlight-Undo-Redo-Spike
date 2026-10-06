@@ -197,8 +197,7 @@ public class SnapshotHistory
         _redoStack.Push(
             SnapshotHistoryEntry.HistoryJump(
                 current,
-                removedEntries,
-                actionCount));
+                removedEntries));
 
         return true;
     }
@@ -249,8 +248,7 @@ public class SnapshotHistory
         _undoStack.Push(
             SnapshotHistoryEntry.HistoryJump(
                 current,
-                removedEntries,
-                actionCount));
+                removedEntries));
 
         return true;
     }

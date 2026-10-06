@@ -9,7 +9,12 @@
     public string Description { get; }
 
     public int ActionCount =>
-        _commands.Count;
+        _commands.Sum(
+            command =>
+                command is
+                    CompositeHistoryCommand composite
+                    ? composite.ActionCount
+                    : 1);
 
     public CompositeHistoryCommand(
         IEnumerable<IUndoableCommand> commands,
@@ -20,6 +25,25 @@
 
         Description =
             description;
+    }
+
+    public static CompositeHistoryCommand CreateHistoryJump(
+        IEnumerable<IUndoableCommand> commands)
+    {
+        var commandList =
+            commands.ToList();
+
+        var actionCount =
+            commandList.Sum(
+                command =>
+                    command is
+                        CompositeHistoryCommand composite
+                        ? composite.ActionCount
+                        : 1);
+
+        return new CompositeHistoryCommand(
+            commandList,
+            $"History Jump ({actionCount} actions)");
     }
 
     public void Execute()

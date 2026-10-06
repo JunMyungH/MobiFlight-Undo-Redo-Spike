@@ -155,14 +155,11 @@ public class CommandHistory
                 command);
         }
 
-        // Redo has to execute the actions
-        // in their original chronological order.
         commandsNewestFirst.Reverse();
 
         var groupedCommand =
-            new CompositeHistoryCommand(
-                commandsNewestFirst,
-                $"History Jump ({actionCount} actions)");
+            CompositeHistoryCommand.CreateHistoryJump(
+                commandsNewestFirst);
 
         _redoStack.Push(
             groupedCommand);
@@ -199,9 +196,8 @@ public class CommandHistory
         }
 
         var groupedCommand =
-            new CompositeHistoryCommand(
-                commands,
-                $"History Jump ({actionCount} actions)");
+            CompositeHistoryCommand.CreateHistoryJump(
+                commands);
 
         _undoStack.Push(
             groupedCommand);

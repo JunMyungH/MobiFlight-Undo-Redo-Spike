@@ -146,30 +146,55 @@ public class PatchHistory
         }
 
         var transactionsNewestFirst =
+            _undoStack
+                .Take(actionCount)
+                .ToList();
+
+        var undoneTransactions =
             new List<PatchTransaction>(
                 actionCount);
+
+        try
+        {
+            foreach (
+                var transaction in
+                transactionsNewestFirst)
+            {
+                transaction.Undo(
+                    project);
+
+                undoneTransactions.Add(
+                    transaction);
+            }
+        }
+        catch
+        {
+            for (
+                var i =
+                    undoneTransactions.Count - 1;
+                i >= 0;
+                i--)
+            {
+                undoneTransactions[i]
+                    .Apply(project);
+            }
+
+            throw;
+        }
 
         for (
             var i = 0;
             i < actionCount;
             i++)
         {
-            var transaction =
-                _undoStack.Pop();
-
-            transaction.Undo(
-                project);
-
-            transactionsNewestFirst.Add(
-                transaction);
+            _undoStack.Pop();
         }
 
         transactionsNewestFirst.Reverse();
 
         var groupedTransaction =
             PatchTransaction.CreateHistoryJump(
-                transactionsNewestFirst,
-                $"History Jump ({actionCount} actions)");
+                transactionsNewestFirst);
 
         _redoStack.Push(
             groupedTransaction);
@@ -190,31 +215,56 @@ public class PatchHistory
         }
 
         var transactions =
+            _redoStack
+                .Take(actionCount)
+                .ToList();
+
+        var appliedTransactions =
             new List<PatchTransaction>(
                 actionCount);
+
+        try
+        {
+            foreach (
+                var transaction in
+                transactions)
+            {
+                transaction.Apply(
+                    project);
+
+                appliedTransactions.Add(
+                    transaction);
+            }
+        }
+        catch
+        {
+            for (
+                var i =
+                    appliedTransactions.Count - 1;
+                i >= 0;
+                i--)
+            {
+                appliedTransactions[i]
+                    .Undo(project);
+            }
+
+            throw;
+        }
 
         for (
             var i = 0;
             i < actionCount;
             i++)
         {
-            var transaction =
-                _redoStack.Pop();
-
-            transaction.Apply(
-                project);
-
-            transactions.Add(
-                transaction);
+            _redoStack.Pop();
         }
 
         var groupedTransaction =
             PatchTransaction.CreateHistoryJump(
-                transactions,
-                $"History Jump ({actionCount} actions)");
+                transactions);
 
-                _undoStack.Push(
-                    groupedTransaction);
+        _undoStack.Push(
+            groupedTransaction);
 
         return true;
     }

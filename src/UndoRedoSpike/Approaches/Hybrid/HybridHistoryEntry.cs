@@ -57,14 +57,18 @@ public class HybridHistoryEntry
     }
 
     public static HybridHistoryEntry CreateHistoryJump(
-        IEnumerable<HybridHistoryEntry> entries,
-        string actionName)
+        IEnumerable<HybridHistoryEntry> entries)
     {
         var entryList =
             entries.ToList();
 
+        var actionCount =
+            entryList.Sum(
+                entry =>
+                    entry.ActionCount);
+
         return new HybridHistoryEntry(
-            actionName,
+            $"History Jump ({actionCount} actions)",
             new HybridCompositeOperation(
                 entryList.Select(
                     entry =>

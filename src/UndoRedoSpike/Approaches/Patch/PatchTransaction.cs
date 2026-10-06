@@ -53,17 +53,21 @@ public class PatchTransaction
     }
 
     public static PatchTransaction CreateHistoryJump(
-        IEnumerable<PatchTransaction> transactions,
-        string label)
+        IEnumerable<PatchTransaction> transactions)
     {
         var transactionList =
             transactions.ToList();
+
+        var actionCount =
+            transactionList.Sum(
+                transaction =>
+                    transaction.ActionCount);
 
         return new PatchTransaction(
             transactionList.SelectMany(
                 transaction =>
                     transaction.Operations),
-            label,
+            $"History Jump ({actionCount} actions)",
             transactionList);
     }
 
