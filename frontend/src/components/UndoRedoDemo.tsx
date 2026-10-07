@@ -8,6 +8,7 @@ import {
   compoundEdit,
   deleteItem,
   duplicateFirstItem,
+  editHybridConfigItem,
   getState,
   moveFirstToLast,
   redo,
@@ -29,6 +30,7 @@ import type {
 } from '../api/spikeApi'
 
 import type {
+  ConfigItem,
   ExperimentResponse,
   SpikeState,
 } from '../types'
@@ -93,6 +95,15 @@ function UndoRedoDemo({
   const [redoOperations, setRedoOperations] =
     useState<number | null>(null)
 
+  const [editingItemId, setEditingItemId] =
+    useState<string | null>(null)
+
+  const [draftName, setDraftName] =
+    useState('')
+
+  const [draftActive, setDraftActive] =
+    useState(false)
+
   const clearBenchmarks = useCallback(() => {
     setExecuteMs(null)
     setUndoMs(null)
@@ -100,6 +111,33 @@ function UndoRedoDemo({
 
     setUndoOperations(null)
     setRedoOperations(null)
+  }, [])
+
+  const openEditor =
+  useCallback(
+    (item: ConfigItem) => {
+      setEditingItemId(
+        item.id,
+      )
+
+      setDraftName(
+        item.name,
+      )
+
+      setDraftActive(
+        item.active,
+      )
+
+      setError(null)
+    },
+    [],
+  )
+
+  const cancelEditor =
+  useCallback(() => {
+    setEditingItemId(null)
+    setDraftName('')
+    setDraftActive(false)
   }, [])
 
   useEffect(() => {
@@ -239,6 +277,52 @@ function UndoRedoDemo({
     [],
   )
 
+  const applyEditor =
+  useCallback(
+    async () => {
+      if (
+        editingItemId === null
+      ) {
+        return
+      }
+
+      try {
+        setPending(true)
+        setError(null)
+
+        const data =
+          await editHybridConfigItem(
+            editingItemId,
+            {
+              name: draftName,
+              active: draftActive,
+            },
+          )
+
+        setState(data)
+
+        clearBenchmarks()
+
+        cancelEditor()
+      } catch (err: unknown) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'Unknown error',
+        )
+      } finally {
+        setPending(false)
+      }
+    },
+    [
+      editingItemId,
+      draftName,
+      draftActive,
+      clearBenchmarks,
+      cancelEditor,
+    ],
+  )
+
   useEffect(() => {
     if (!state) {
       return
@@ -270,6 +354,12 @@ function UndoRedoDemo({
           target instanceof HTMLElement &&
           target.isContentEditable
         )
+      ) {
+        return
+      }
+
+      if (
+        editingItemId !== null
       ) {
         return
       }
@@ -381,6 +471,46 @@ function UndoRedoDemo({
     runAction,
     runHistoryAction,
     runExperimentAction,
+    editingItemId,
+  ])
+
+  useEffect(() => {
+    if (
+      editingItemId === null
+    ) {
+      return
+    }
+
+    const handleEscape = (
+      event: KeyboardEvent,
+    ) => {
+      if (
+        event.key !== 'Escape' ||
+        pending
+      ) {
+        return
+      }
+
+      event.preventDefault()
+
+      cancelEditor()
+    }
+
+    window.addEventListener(
+      'keydown',
+      handleEscape,
+    )
+
+    return () => {
+      window.removeEventListener(
+        'keydown',
+        handleEscape,
+      )
+    }
+  }, [
+    editingItemId,
+    pending,
+    cancelEditor,
   ])
   
   if (error && !state) {
@@ -943,6 +1073,22 @@ function UndoRedoDemo({
                       : 'Inactive'}
                   </span>
 
+                  {approach ===
+                    'hybrid' && (
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={(event) => {
+                        event.stopPropagation()
+
+                        openEditor(item)
+                      }}
+                      className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:bg-indigo-500/10 hover:text-indigo-300 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Edit
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     disabled={pending}
@@ -1098,6 +1244,141 @@ function UndoRedoDemo({
           />
         </div>
       </section>
+
+      {approach === 'hybrid' &&
+      editingItemId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-config-item-title"
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl shadow-black/50"
+          >
+            <div className="border-b border-white/10 px-5 py-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h2
+                    id="edit-config-item-title"
+                    className="text-sm font-semibold text-white"
+                  >
+                    Edit Config Item
+                  </h2>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    Changes remain local
+                    until Apply.
+                  </p>
+                </div>
+
+                <span className="rounded-full border border-amber-400/20 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold tracking-wider text-amber-300 uppercase">
+                  Draft
+                </span>
+              </div>
+            </div>
+
+            <form
+              onSubmit={(event) => {
+                event.preventDefault()
+
+                void applyEditor()
+              }}
+              className="space-y-5 p-5"
+            >
+              <div>
+                <label
+                  htmlFor="draft-config-name"
+                  className="mb-2 block text-xs font-medium text-slate-400"
+                >
+                  Name
+                </label>
+
+                <input
+                  id="draft-config-name"
+                  type="text"
+                  autoFocus
+                  value={draftName}
+                  disabled={pending}
+                  onChange={(event) =>
+                    setDraftName(
+                      event.target.value,
+                    )
+                  }
+                  className="w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors placeholder:text-slate-700 focus:border-indigo-400/40 focus:ring-2 focus:ring-indigo-500/10 disabled:opacity-50"
+                />
+
+                <p className="mt-2 text-[11px] leading-5 text-slate-600">
+                  Ctrl+Z while this field is
+                  focused uses native text
+                  editing Undo and does not
+                  touch Project history.
+                </p>
+              </div>
+
+              <label className="flex cursor-pointer items-center justify-between rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3">
+                <div>
+                  <div className="text-sm font-medium text-slate-300">
+                    Active
+                  </div>
+
+                  <div className="mt-0.5 text-xs text-slate-600">
+                    Draft value only until
+                    Apply.
+                  </div>
+                </div>
+
+                <input
+                  type="checkbox"
+                  checked={draftActive}
+                  disabled={pending}
+                  onChange={(event) =>
+                    setDraftActive(
+                      event.target.checked,
+                    )
+                  }
+                  className="h-4 w-4 cursor-pointer rounded border-slate-700 bg-slate-900 accent-indigo-500"
+                />
+              </label>
+
+              <div className="rounded-xl border border-cyan-400/10 bg-cyan-500/5 px-4 py-3 text-xs leading-5 text-cyan-200/70">
+                ProjectState and global
+                history are unchanged while
+                this editor is open.
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-white/10 pt-4">
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={
+                    cancelEditor
+                  }
+                  className={
+                    buttonNeutral
+                  }
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={pending}
+                  className={
+                    buttonAccent
+                  }
+                >
+                  {pending
+                    ? 'Applying...'
+                    : 'Apply'}
+                </button>
+              </div>
+
+              <p className="text-right text-[10px] text-slate-600">
+                Esc to cancel
+              </p>
+            </form>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="rounded-xl border border-rose-400/20 bg-rose-500/5 px-4 py-3 text-sm text-rose-300">

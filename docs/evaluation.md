@@ -391,14 +391,189 @@ The experiment therefore does not change the main recommendation:
 
 ---
 
-## 9. Remaining Questions for Production Integration
+## 9. Interaction Boundary Experiment
+
+The spike also evaluated where Undo history should be created during form-based editing.
+
+A small Config Item editor was used to distinguish temporary UI state from committed ProjectState mutations.
+
+The tested interaction was:
+
+```
+Open editor
+-> modify Name
+-> modify Active
+-> Apply
+```
+
+While the editor is open, the modified values remain local draft state in the React frontend.
+
+No ProjectState mutation and no global history entry are created until Apply is selected.
+
+### Draft State
+Opening the editor copies the current Config Item values into local frontend state.
+
+For example:
+
+```
+ProjectState
+
+Name   = "Config Item 1"
+Active = true
+
+        |
+        | Open editor
+        v
+
+Draft
+
+Name   = "Config Item 1"
+Active = true
+```
+
+Subsequent typing or checkbox changes modify only the draft.
+
+```
+Draft
+
+Name   = "Landing Light"
+Active = false
+
+ProjectState
+
+Name   = "Config Item 1"
+Active = true
+```
+
+The ProjectState and Project history therefore remain unchanged during an unfinished interaction.
+
+### Apply
+
+Apply sends the final draft values to the backend as one request.
+
+```
+PUT /api/hybrid/config-items/{id}
+```
+
+The backend compares the committed state with the submitted draft and creates Patch operations only for values that actually changed.
+Example:
+
+```
+Edit Config Item
+    |
+    +-- ReplaceNamePatch
+    |
+    +-- ReplaceActivePatch
+```
+
+Both low-level changes are stored inside one semantic Hybrid history entry:
+
+```
+Edit Config Item
+[replace Name + replace Active]
+```
+
+Therefore:
+
+```
+several draft edits
+-> one Apply
+-> one global Undo step
+```
+
+Undoing that entry once restores the complete state from before Apply.
+
+Redoing it once reapplies the complete committed edit.
+
+### No-op Apply
+
+Applying an editor without changing any values does not create a history entry.
+
+```
+Open
+-> no changes
+-> Apply
+-> history unchanged
+```
+
+This avoids recording meaningless Undo steps.
+
+### Cancel and Escape
+
+Cancel and Escape discard the frontend draft without sending a mutation request to the backend.
+
+```
+Open editor
+-> modify draft
+-> Cancel / Escape
+-> discard draft
+```
+
+This is intentionally different from Undo.
+
+Cancel operates on an unfinished interaction.
+
+Undo operates on an already committed ProjectState transition.
+
+### Local and Global Undo
+
+The prototype also verified that native text editing and global Project Undo can coexist.
+
+When a text input is focused:
+
+```
+Ctrl+Z
+-> native browser text Undo
+```
+
+The global Project history handler ignores the shortcut.
+
+While the draft editor is open, other global mutation shortcuts are also suppressed so that unfinished editor state does not accidentally interact with Project history.
+
+After Apply closes the editor:
+
+```
+Ctrl+Z
+-> global Project Undo
+```
+
+The complete committed edit is reverted as one history action.
+
+### Finding
+
+The experiment supports a transaction-level model for form-based Project editing:
+
+```
+Draft UI state
+    |
+    | Apply
+    v
+Committed semantic action
+    |
+    v
+Global Project history
+```
+
+For MobiFlight-style editors, temporary field edits should normally remain outside the global Undo history.
+
+A global history entry should be created at the point where the user commits the interaction, such as:
+
+- Apply
+- successful Drop
+- confirmed Add
+- confirmed Delete
+- completed inline rename
+
+This keeps Project Undo aligned with meaningful user actions rather than individual UI events.
+
+---
+
+## 10. Remaining Questions for Production Integration
 
 The main architectural spike is complete. The following topics still require product-level decisions in MobiFlight:
 
-- Where a user action begins and commits
-- Draft edits versus committed global Undo
-- Cancel / Escape behavior
-- Production integration of native text-field Ctrl+Z versus global project Undo
+- Applying the demonstrated commit-boundary model to the real MobiFlight editors
+- Production integration of native text-field Ctrl+Z versus global Project Undo
 - Side effects outside ProjectState
 - Production-level persistent ID resolver/index
 - Reference-identity requirements across Snapshot restores

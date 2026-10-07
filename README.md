@@ -77,3 +77,5 @@ The architecture comparison currently favors a Hybrid approach:
 - One semantic history entry per committed user action
 - Persistent IDs rather than direct object references for Patch target resolution
 - History navigation implemented independently from the underlying history representation
+- Draft editor state remains outside global Project history until Apply
+- One committed UI interaction maps to one semantic Undo step

@@ -11,17 +11,32 @@ export type Approach =
 type HttpMethod =
   | 'GET'
   | 'POST'
+  | 'PUT'
   | 'DELETE'
 
 async function request(
   approach: Approach,
   path: string,
   method: HttpMethod = 'GET',
+  body?: unknown,
 ): Promise<SpikeState> {
   const response = await fetch(
     `${API_URL}/api/${approach}${path}`,
     {
       method,
+
+      headers:
+        body === undefined
+          ? undefined
+          : {
+              'Content-Type':
+                'application/json',
+            },
+
+      body:
+        body === undefined
+          ? undefined
+          : JSON.stringify(body),
     },
   )
 
@@ -55,6 +70,23 @@ export function deleteItem(
     approach,
     `/config-items/${id}`,
     'DELETE',
+  )
+}
+
+export type EditConfigItemRequest = {
+  name: string
+  active: boolean
+}
+
+export function editHybridConfigItem(
+  id: string,
+  edit: EditConfigItemRequest,
+) {
+  return request(
+    'hybrid',
+    `/config-items/${id}`,
+    'PUT',
+    edit,
   )
 }
 
