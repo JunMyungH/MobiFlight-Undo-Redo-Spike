@@ -1605,6 +1605,64 @@ hybridApi.MapPost(
             CreateHybridResponse(service));
     });
 
+hybridApi.MapPut(
+    "/config-items/{id:guid}",
+    (
+        Guid id,
+        EditConfigItemRequest request,
+        HybridSpikeService service) =>
+    {
+        var item =
+            service.Project.ConfigItems
+                .FirstOrDefault(
+                    item => item.Id == id);
+
+        if (item is null)
+        {
+            return Results.NotFound();
+        }
+
+        var operations =
+            new List<IPatchOperation>();
+
+        if (item.Name != request.Name)
+        {
+            operations.Add(
+                new ReplaceNamePatch(
+                    item.Id,
+                    item.Name,
+                    request.Name));
+        }
+
+        if (item.Active != request.Active)
+        {
+            operations.Add(
+                new ReplaceActivePatch(
+                    item.Id,
+                    item.Active,
+                    request.Active));
+        }
+
+        if (operations.Count == 0)
+        {
+            return Results.Ok(
+                CreateHybridResponse(service));
+        }
+
+        var entry =
+            new HybridHistoryEntry(
+                "Edit Config Item",
+                new PatchTransaction(
+                    operations));
+
+        service.History.Execute(
+            service.Project,
+            entry);
+
+        return Results.Ok(
+            CreateHybridResponse(service));
+    });
+
 hybridApi.MapDelete(
     "/config-items/{id:guid}",
     (
@@ -2427,3 +2485,11 @@ static object CreateHybridResponse(
 }
 
 app.Run();
+
+public sealed record EditConfigItemRequest(
+    string Name,
+    bool Active);
+
+public partial class Program
+{
+}
