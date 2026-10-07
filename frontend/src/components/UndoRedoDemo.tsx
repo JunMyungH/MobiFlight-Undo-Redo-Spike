@@ -1247,12 +1247,17 @@ function UndoRedoDemo({
 
       {approach === 'hybrid' &&
       editingItemId !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+         <>
+          <div
+            className="fixed inset-0 z-40 bg-transparent"
+            aria-hidden="true"
+          />
+
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="edit-config-item-title"
-            className="w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl shadow-black/50"
+            className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-white/10 bg-slate-900 shadow-2xl shadow-black/50"
           >
             <div className="border-b border-white/10 px-5 py-4">
               <div className="flex items-center justify-between gap-4">
@@ -1282,7 +1287,7 @@ function UndoRedoDemo({
 
                 void applyEditor()
               }}
-              className="space-y-5 p-5"
+              className="flex flex-1 flex-col gap-5 overflow-y-auto p-5"
             >
               <div>
                 <label
@@ -1345,7 +1350,7 @@ function UndoRedoDemo({
                 this editor is open.
               </div>
 
-              <div className="flex justify-end gap-2 border-t border-white/10 pt-4">
+              <div className="mt-auto flex justify-end gap-2 border-t border-white/10 pt-4">
                 <button
                   type="button"
                   disabled={pending}
@@ -1377,7 +1382,7 @@ function UndoRedoDemo({
               </p>
             </form>
           </div>
-        </div>
+        </>
       )}
 
       {error && (
