@@ -251,38 +251,74 @@ The UI/history still sees one semantic action while the reversal logic remains r
 
 ---
 
-## 7. Overall Spike Conclusion
+## 7. Spike Conclusion and Architecture Reassessment
 
-The spike does not support selecting one universal Undo/Redo representation for every mutation.
+### 7.1 Technical Findings
 
-The strongest architecture demonstrated by the prototype is **Hybrid v2 with Patch as the default reversal mechanism and Snapshot available for selected broad or structurally complex operations**.
+The spike successfully implemented and compared four Undo/Redo approaches: Command, Snapshot, Patch, and Hybrid.
 
-Recommended direction:
+The experiments demonstrated that:
 
-```
-User Action
-    |
-    v
-Semantic HybridHistoryEntry
-    |
-    +-- localized / identity-sensitive action
-    |       -> Patch-backed operation
-    |
-    +-- broad / structurally complex action
-            -> Snapshot-backed operation
-```
+- Command provides clear semantic actions and explicit reversal logic.
+- Snapshot provides generic restoration without requiring action-specific inverse operations.
+- Patch provides reusable, fine-grained reversible mutations.
+- Hybrid can combine different history representations.
 
-Patch should be the normal path for updates, create/duplicate, delete, move/reorder, and compound actions because it stores only relevant reversal data and composes well.
+The benchmarks showed lower costs for Command and Patch in many localized operations, while Snapshot was generally simpler to implement for broad mutations.
 
-Snapshot should remain an optional strategy rather than the default. It is useful when representing the inverse mutation as many individual operations becomes more complex than restoring state, but its object-identity and full-state-copying behavior must be considered.
+However, these results were obtained using a simplified ProjectState.
 
-The performance experiments also show an important implementation lesson:
+They do not directly establish the performance or memory costs of the real MobiFlight Connector.
 
-> The measured performance of an Undo/Redo architecture can be dominated by target lookup and collection algorithms rather than by the history representation itself.
+### 7.2 Findings from Sebastian's Review
 
-Therefore, production Patch operations should use an efficient ID resolver/index where appropriate instead of repeatedly scanning the complete collection.
+The architecture review raised several important concerns.
 
-The spike also supports defining history at the **committed user-action level**. A transaction containing several low-level changes should normally appear as one Undo step.
+First, the implementation complexity of PatchTransaction and individual Patch operations may not be justified by the measured performance improvements.
+
+Second, Snapshot operations may be sufficiently fast for realistic MobiFlight projects, where the number of ConfigItems is expected to be substantially smaller than the largest stress-test cases.
+
+Third, Snapshot history entries should retain semantic action descriptions. This can be achieved by attaching metadata to the history entry and does not require using Command-based reversal.
+
+Fourth, the production architecture must account for the existing React frontend and .NET backend separation.
+
+Undo/Redo must restore the authoritative Project state while keeping the frontend synchronized with the resulting state.
+
+### 7.3 Revised Architecture Decision
+
+The initial spike favored Hybrid with Patch as the default reversal strategy.
+
+After the architecture review, this recommendation is no longer considered a final production decision.
+
+The preferred candidates for further evaluation are:
+
+1. Command-based Undo/Redo
+2. Semantic Snapshot-based Undo/Redo
+
+Patch and Hybrid remain documented alternatives but are not currently the preferred starting point for production integration.
+
+The final choice should prioritize:
+
+- simplicity of implementation,
+- maintainability,
+- correct state restoration,
+- frontend/backend synchronization,
+- side-effect handling,
+- realistic memory consumption.
+
+Raw execution speed should only become a deciding factor when measurements demonstrate a meaningful impact on the application.
+
+### 7.4 Next Evaluation Steps
+
+Before committing to a production implementation:
+
+1. Add semantic action descriptions to Snapshot history entries.
+2. Verify correct Snapshot restoration and failure handling.
+3. Measure Snapshot performance and memory using realistic MobiFlight ConfigItem structures.
+4. Define history ownership and frontend/backend synchronization.
+5. Compare the remaining implementation complexity of Command and Semantic Snapshot.
+
+**Decision status: Pending production-oriented validation.**
 
 ---
 
