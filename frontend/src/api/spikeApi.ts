@@ -78,12 +78,17 @@ export type EditConfigItemRequest = {
   active: boolean
 }
 
-export function editHybridConfigItem(
+export type ConfigEditApproach =
+  | 'snapshot'
+  | 'hybrid'
+
+export function editConfigItem(
+  approach: ConfigEditApproach,
   id: string,
   edit: EditConfigItemRequest,
-) {
+): Promise<SpikeState> {
   return request(
-    'hybrid',
+    approach,
     `/config-items/${id}`,
     'PUT',
     edit,

@@ -8,7 +8,7 @@ import {
   compoundEdit,
   deleteItem,
   duplicateFirstItem,
-  editHybridConfigItem,
+  editConfigItem,
   getState,
   moveFirstToLast,
   redo,
@@ -276,12 +276,16 @@ function UndoRedoDemo({
     },
     [],
   )
-
-  const applyEditor =
-  useCallback(
+  
+  const applyEditor = useCallback(
     async () => {
+      if (editingItemId === null) {
+        return
+      }
+
       if (
-        editingItemId === null
+        approach !== 'snapshot' &&
+        approach !== 'hybrid'
       ) {
         return
       }
@@ -290,19 +294,17 @@ function UndoRedoDemo({
         setPending(true)
         setError(null)
 
-        const data =
-          await editHybridConfigItem(
-            editingItemId,
-            {
-              name: draftName,
-              active: draftActive,
-            },
-          )
+        const data = await editConfigItem(
+          approach,
+          editingItemId,
+          {
+            name: draftName,
+            active: draftActive,
+          },
+        )
 
         setState(data)
-
         clearBenchmarks()
-
         cancelEditor()
       } catch (err: unknown) {
         setError(
@@ -315,6 +317,7 @@ function UndoRedoDemo({
       }
     },
     [
+      approach,
       editingItemId,
       draftName,
       draftActive,
@@ -1073,8 +1076,8 @@ function UndoRedoDemo({
                       : 'Inactive'}
                   </span>
 
-                  {approach ===
-                    'hybrid' && (
+                  {(approach === 'hybrid' ||
+                    approach === 'snapshot') && (
                     <button
                       type="button"
                       disabled={pending}
@@ -1245,7 +1248,9 @@ function UndoRedoDemo({
         </div>
       </section>
 
-      {approach === 'hybrid' &&
+      {(approach === 'hybrid' ||
+        approach === 'snapshot'
+      ) &&
       editingItemId !== null && (
          <>
           <div

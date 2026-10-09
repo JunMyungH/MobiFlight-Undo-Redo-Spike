@@ -484,7 +484,8 @@ snapshotApi.MapPost(
                         item => item.Id == id);
 
                 item.Active = !item.Active;
-            });
+            },
+            "Toggle Active");
 
         return Results.Ok(CreateSnapshotResponse(service));
     });
@@ -510,9 +511,51 @@ snapshotApi.MapDelete(
             {
                 project.ConfigItems.RemoveAll(
                     item => item.Id == id);
-            });
+            },
+            "Delete Config Item");
 
         return Results.Ok(CreateSnapshotResponse(service));
+    });
+
+snapshotApi.MapPut(
+    "/config-items/{id:guid}",
+    (
+        Guid id,
+        EditConfigItemRequest request,
+        SnapshotSpikeService service) =>
+    {
+        var item =
+            service.Project.ConfigItems
+                .FirstOrDefault(
+                    item => item.Id == id);
+
+        if (item is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (item.Name == request.Name &&
+            item.Active == request.Active)
+        {
+            return Results.Ok(
+                CreateSnapshotResponse(service));
+        }
+
+        service.History.Execute(
+            service.Project,
+            project =>
+            {
+                var target =
+                    project.ConfigItems.First(
+                        item => item.Id == id);
+
+                target.Name = request.Name;
+                target.Active = request.Active;
+            },
+            "Edit Config Item");
+
+        return Results.Ok(
+            CreateSnapshotResponse(service));
     });
 
 snapshotApi.MapPost(
@@ -628,7 +671,8 @@ snapshotApi.MapPost(
 
                 project.ConfigItems.RemoveAt(0);
                 project.ConfigItems.Add(item);
-            });
+            },
+            "Compound Edit");
 
         return Results.Ok(
             CreateSnapshotResponse(service));
@@ -655,7 +699,8 @@ snapshotApi.MapPost(
                     item.Active =
                         !item.Active;
                 }
-            });
+            },
+            "Bulk Toggle");
 
         stopwatch.Stop();
 
@@ -706,7 +751,8 @@ snapshotApi.MapPost(
             {
                 project.ConfigItems.RemoveAll(
                     item => selectedIds.Contains(item.Id));
-            });
+            },
+            "Bulk Delete");
 
         stopwatch.Stop();
 
@@ -749,7 +795,8 @@ snapshotApi.MapPost(
                 
                 project.ConfigItems.Insert(
                     1, copy);
-            });
+            },
+            "Duplicate Config Item");
 
         stopwatch.Stop();
 
@@ -783,7 +830,8 @@ snapshotApi.MapPost(
                 var item = project.ConfigItems[0];
                 project.ConfigItems.RemoveAt(0);
                 project.ConfigItems.Add(item);
-            });
+            },
+            "Move Config Item");
 
         stopwatch.Stop();
 

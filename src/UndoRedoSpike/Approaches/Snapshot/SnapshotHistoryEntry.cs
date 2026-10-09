@@ -8,13 +8,16 @@
 
     public int ActionCount { get; }
 
+    public string ActionName { get; }
+
     public bool IsHistoryJump =>
         GroupedEntries is not null;
 
     private SnapshotHistoryEntry(
         ProjectState snapshot,
         IReadOnlyList<SnapshotHistoryEntry>? groupedEntries,
-        int actionCount)
+        int actionCount,
+        string actionName)
     {
         Snapshot =
             snapshot;
@@ -24,15 +27,23 @@
 
         ActionCount =
             actionCount;
+
+        ActionName =
+            actionName;
     }
 
     public static SnapshotHistoryEntry Single(
-        ProjectState snapshot)
+        ProjectState snapshot,
+        string actionName = "Project Change")
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(
+            actionName);
+
         return new SnapshotHistoryEntry(
             snapshot,
             null,
-            1);
+            1,
+            actionName);
     }
 
     public static SnapshotHistoryEntry HistoryJump(
@@ -50,7 +61,8 @@
         return new SnapshotHistoryEntry(
             destination,
             entryList,
-            actionCount);
+            actionCount,
+            "History Jump");
     }
 
     public int StoredConfigItemCopies =>
@@ -71,6 +83,6 @@
         }
 
         return
-            $"ProjectState snapshot ({Snapshot.ConfigItems.Count} ConfigItems)";
+            ActionName;
     }
 }
