@@ -181,6 +181,8 @@ Patch action
 
 ## 6. Spike Recommendation by Mutation Type
 
+**Historical recommendation:** This section documents the initial architecture recommendation based on project-level mutation experiments. It should not be interpreted as the final production decision. The recommendation was subsequently reassessed in Section 7, taking implementation complexity and the narrower ConfigItem editor scope into account.
+
 The following table is the conclusion of this spike, based on the current prototype and measurements.
 
 | Mutation type | Preferred representation from this spike | Reason |
@@ -308,17 +310,31 @@ The final choice should prioritize:
 
 Raw execution speed should only become a deciding factor when measurements demonstrate a meaningful impact on the application.
 
-### 7.4 Next Evaluation Steps
+### 7.4 Production-Oriented Evaluation Status
 
-Before committing to a production implementation:
+The following additional investigations have been completed:
 
-1. Add semantic action descriptions to Snapshot history entries.
-2. Verify correct Snapshot restoration and failure handling.
-3. Measure Snapshot performance and memory using realistic MobiFlight ConfigItem structures.
-4. Define history ownership and frontend/backend synchronization.
-5. Compare the remaining implementation complexity of Command and Semantic Snapshot.
+- Semantic action descriptions and failure handling for Snapshot history.
+- ConfigItem editing with Apply/Cancel boundaries.
+- Local Item Snapshot Undo/Redo with experimental history limits of 10, 25, and 50 steps.
+- Performance and memory benchmarks using actual MobiFlight ConfigItems.
+- Preliminary verification of nested configuration object cloning.
+- Automated tests for local history behavior, including Undo/Redo, history overflow, Redo invalidation, and history resizing.
 
-**Decision status: Pending production-oriented validation.**
+The frontend history unit tests, production build, and lint checks have passed.
+
+These findings support Item Snapshot as the current preferred candidate for editor-local Undo/Redo, subject to review.
+
+The findings do not imply that Item Snapshot is necessarily the preferred strategy for committed ConfigItem list actions or project-wide Undo/Redo.
+
+Remaining validation:
+
+- Manual verification of editor interactions.
+- Integration tests with the real ConfigItem editor and nested settings.
+- Confirmation of the initial production scope and history capacity.
+- Verification of synchronization and side effects for committed configuration changes.
+
+**Decision status: Ready for architecture and scope review. Final production approval pending.**
 
 ---
 
@@ -677,6 +693,45 @@ The evaluation should examine:
 - Whether the history is correctly discarded when the editor is closed.
 
 The final history limit should balance practical editing needs, memory consumption, and implementation simplicity.
+
+### Bounded Item Snapshot History Benchmark
+
+An additional benchmark was conducted to evaluate the memory consumption of bounded Item Snapshot history using actual MobiFlight ConfigItems.
+
+The experiment loaded 14 real ConfigItems and applied 100 modifications to each item. Every ConfigItem maintained its own independent snapshot history with a maximum capacity of 10, 25, or 50 stored snapshots.
+
+| Measured Metric | 10 Snapshots | 25 Snapshots | 50 Snapshots |
+|---|---|---|---|
+| Execute time | 0.787 ms | 0.904 ms | 0.634 ms |
+| Allocated memory | 1,119.6 KB | 1,121.5 KB | 1,125.1 KB |
+| Estimated retained memory | 111.6 KB | 234.8 KB | 455.4 KB |
+| Total stored snapshots | 140 | 350 | 700 |
+
+All benchmark tests passed.
+
+The results indicate that estimated retained memory increases with the number of stored snapshots, while execution time and total memory allocation remain relatively similar across the three limits.
+
+This is expected because each scenario executes the same number of modifications and creates the same number of snapshots, regardless of how many snapshots are retained.
+
+Although the benchmark maintained histories for 14 ConfigItems simultaneously, the current editor-local Undo/Redo scope generally requires history for only the ConfigItem being edited.
+
+Therefore, the memory overhead of a bounded Item Snapshot history appears manageable for the current scope.
+
+A default history limit of 25 steps remains a reasonable experimental configuration, while 50 steps should remain available for further evaluation.
+
+However, these measurements were obtained from a single benchmark run, and the results should not be interpreted as definitive production memory requirements.
+
+The benchmark also verified that cloning preserves the tested basic properties and creates separate instances of several major nested configuration objects. More detailed tests are still needed to verify the independence of all nested mutable data.
+
+Remaining considerations:
+
+- Define history capacity consistently in terms of undoable actions rather than only stored snapshots.
+- Verify Undo/Redo correctness when the maximum history capacity is reached.
+- Test more complex nested configuration modifications.
+- Confirm the lifetime and default capacity of editor-local history.
+- Evaluate separate history policies for future profile-level, project-level, and global Undo/Redo.
+
+These findings support further consideration of Item Snapshot as a practical approach for ConfigItem editor Undo/Redo, subject to final architectural review.
 
 ### Conclusion and Future Considerations
 

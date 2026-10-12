@@ -70,12 +70,23 @@ Other Action Catalog patterns such as Create, Move/Reorder, Compound Edit, and I
 
 ### Current Result
 
-The architecture comparison currently favors a Hybrid approach:
+The spike has implemented and evaluated Command, Snapshot, Patch, and Hybrid Undo/Redo approaches.
 
-- Patch-backed history entries for localized and identity-sensitive changes
-- Snapshot-backed entries for selected broad or structurally complex changes
-- One semantic history entry per committed user action
-- Persistent IDs rather than direct object references for Patch target resolution
-- History navigation implemented independently from the underlying history representation
-- Draft editor state remains outside global Project history until Apply
-- One committed UI interaction maps to one semantic Undo step
+Although the initial evaluation favored Hybrid with Patch-backed history entries, subsequent architecture review and production-oriented experiments led to a reassessment.
+
+For the current scope of Undo/Redo within an individual ConfigItem editor, bounded Item **Snapshot history is the preferred candidate for further integration.**
+
+The prototype demonstrates:
+
+- Semantic Snapshot history.
+- Local Undo/Redo for temporary ConfigItem drafts.
+- Apply/Cancel boundaries.
+- Configurable experimental history limits (10, 25, and 50 steps).
+- Automated local history tests.
+- Performance and memory measurements using actual MobiFlight ConfigItems.
+
+Command remains an alternative, particularly for committed actions where compact history representation or object identity preservation is important.
+
+The initial production scope, final history limit, and implementation issue breakdown remain subject to review.
+
+**See docs/evaluation.md** for detailed findings and remaining integration questions.
