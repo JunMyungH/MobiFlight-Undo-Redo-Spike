@@ -25,6 +25,15 @@ import {
   undoTo,
 } from '../api/spikeApi'
 
+import {
+  createLocalItemHistory,
+  currentLocalItem,
+  recordLocalItemChange,
+  undoLocalItem,
+  redoLocalItem,
+  resizeLocalItemHistory,
+} from '../lib/localItemHistory'
+
 import type {
   Approach,
 } from '../api/spikeApi'
@@ -34,6 +43,10 @@ import type {
   ExperimentResponse,
   SpikeState,
 } from '../types'
+
+import type {
+  LocalItemHistory,
+} from '../lib/localItemHistory'
 
 type Props = {
   approach: Approach
@@ -66,6 +79,47 @@ const approachDescriptions:
     hybrid:
       'A single semantic history can use patches for localized mutations and snapshots for broad structural changes.',
   }
+
+type LocalEditorState = {
+  history: LocalItemHistory<ConfigItem>
+  nameInput: string
+}
+
+function sameConfigItem(
+  a: ConfigItem,
+  b: ConfigItem,
+): boolean {
+  return (
+    a.id === b.id &&
+    a.name === b.name &&
+    a.active === b.active
+  )
+}
+
+function commitPendingName(
+  editor: LocalEditorState,
+): LocalEditorState {
+  const current = currentLocalItem(editor.history)
+
+  const nextHistory = recordLocalItemChange(
+    editor.history,
+    {
+      ...current,
+      name: editor.nameInput,
+    },
+    'Edit Name',
+    sameConfigItem,
+  )
+
+  if (nextHistory === editor.history) {
+    return editor
+  }
+
+  return {
+    ...editor,
+    history: nextHistory,
+  }
+}
 
 function UndoRedoDemo({
   approach,
@@ -104,6 +158,12 @@ function UndoRedoDemo({
   const [draftActive, setDraftActive] =
     useState(false)
 
+  const [localHistoryLimit, setLocalHistoryLimit] =
+    useState<10 | 25 | 50>(25)
+
+  const [localEditor, setLocalEditor] =
+    useState<LocalEditorState | null>(null)
+
   const clearBenchmarks = useCallback(() => {
     setExecuteMs(null)
     setUndoMs(null)
@@ -112,32 +172,79 @@ function UndoRedoDemo({
     setUndoOperations(null)
     setRedoOperations(null)
   }, [])
-
-  const openEditor =
-  useCallback(
+  
+  const openEditor = useCallback(
     (item: ConfigItem) => {
-      setEditingItemId(
-        item.id,
-      )
+      setEditingItemId(item.id)
+      setDraftName(item.name)
+      setDraftActive(item.active)
 
-      setDraftName(
-        item.name,
-      )
-
-      setDraftActive(
-        item.active,
-      )
+      if (approach === 'snapshot') {
+        setLocalEditor({
+          history: createLocalItemHistory(
+            item,
+            localHistoryLimit,
+          ),
+          nameInput: item.name,
+        })
+      } else {
+        setLocalEditor(null)
+      }
 
       setError(null)
     },
-    [],
+    [approach, localHistoryLimit],
   )
 
-  const cancelEditor =
-  useCallback(() => {
+  const cancelEditor = useCallback(() => {
     setEditingItemId(null)
     setDraftName('')
     setDraftActive(false)
+    setLocalEditor(null)
+  }, [])
+
+  const undoLocalEditor = useCallback(() => {
+    setLocalEditor((previous) => {
+      if (!previous) {
+        return previous
+      }
+
+      const committed = commitPendingName(previous)
+
+      const nextHistory =
+        undoLocalItem(committed.history)
+
+      if (nextHistory === committed.history) {
+        return committed
+      }
+
+      return {
+        history: nextHistory,
+        nameInput: currentLocalItem(nextHistory).name,
+      }
+    })
+  }, [])
+
+  const redoLocalEditor = useCallback(() => {
+    setLocalEditor((previous) => {
+      if (!previous) {
+        return previous
+      }
+
+      const committed = commitPendingName(previous)
+
+      const nextHistory =
+        redoLocalItem(committed.history)
+
+      if (nextHistory === committed.history) {
+        return committed
+      }
+
+      return {
+        history: nextHistory,
+        nameInput: currentLocalItem(nextHistory).name,
+      }
+    })
   }, [])
 
   useEffect(() => {
@@ -290,6 +397,16 @@ function UndoRedoDemo({
         return
       }
 
+      const finalName =
+        approach === 'snapshot' && localEditor
+          ? localEditor.nameInput
+          : draftName
+
+      const finalActive =
+        approach === 'snapshot' && localEditor
+          ? currentLocalItem(localEditor.history).active
+          : draftActive
+
       try {
         setPending(true)
         setError(null)
@@ -298,13 +415,16 @@ function UndoRedoDemo({
           approach,
           editingItemId,
           {
-            name: draftName,
-            active: draftActive,
+            name: finalName,
+            active: finalActive,
           },
         )
 
         setState(data)
         clearBenchmarks()
+
+        // Discard local draft and history
+        // only after successful Apply.
         cancelEditor()
       } catch (err: unknown) {
         setError(
@@ -319,6 +439,7 @@ function UndoRedoDemo({
     [
       approach,
       editingItemId,
+      localEditor,
       draftName,
       draftActive,
       clearBenchmarks,
@@ -515,7 +636,88 @@ function UndoRedoDemo({
     pending,
     cancelEditor,
   ])
-  
+
+  useEffect(() => {
+    if (
+      approach !== 'snapshot' ||
+      editingItemId === null
+    ) {
+      return
+    }
+
+    const handleLocalKeyDown = (
+      event: KeyboardEvent,
+    ) => {
+      if (pending) {
+        return
+      }
+
+      const target = event.target
+
+      // Keep native text-field Undo/Redo.
+      if (
+        target instanceof HTMLTextAreaElement ||
+        (
+          target instanceof HTMLInputElement &&
+          ![
+            'checkbox',
+            'radio',
+            'button',
+            'submit',
+            'reset',
+          ].includes(target.type)
+        ) ||
+        (
+          target instanceof HTMLElement &&
+          target.isContentEditable
+        )
+      ) {
+        return
+      }
+
+      const modifier =
+        event.ctrlKey || event.metaKey
+
+      if (!modifier) {
+        return
+      }
+
+      const key = event.key.toLowerCase()
+
+      if (key === 'z' && !event.shiftKey) {
+        event.preventDefault()
+        undoLocalEditor()
+        return
+      }
+
+      if (
+        key === 'y' ||
+        (key === 'z' && event.shiftKey)
+      ) {
+        event.preventDefault()
+        redoLocalEditor()
+      }
+    }
+
+    window.addEventListener(
+      'keydown',
+      handleLocalKeyDown,
+    )
+
+    return () => {
+      window.removeEventListener(
+        'keydown',
+        handleLocalKeyDown,
+      )
+    }
+  }, [
+    approach,
+    editingItemId,
+    pending,
+    undoLocalEditor,
+    redoLocalEditor,
+  ])
+
   if (error && !state) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -1306,13 +1508,34 @@ function UndoRedoDemo({
                   id="draft-config-name"
                   type="text"
                   autoFocus
-                  value={draftName}
                   disabled={pending}
-                  onChange={(event) =>
-                    setDraftName(
-                      event.target.value,
-                    )
+                  value={
+                    approach === 'snapshot' && localEditor
+                      ? localEditor.nameInput
+                      : draftName
                   }
+                  onChange={(event) => {
+                    const value = event.target.value
+
+                    if (approach === 'snapshot') {
+                      setLocalEditor((previous) =>
+                        previous
+                          ? { ...previous, nameInput: value }
+                          : previous,
+                      )
+                    } else {
+                      setDraftName(value)
+                    }
+                  }}
+                  onBlur={() => {
+                    if (approach === 'snapshot') {
+                      setLocalEditor((previous) =>
+                        previous
+                          ? commitPendingName(previous)
+                          : previous,
+                      )
+                    }
+                  }}
                   className="w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-slate-200 outline-none transition-colors placeholder:text-slate-700 focus:border-indigo-400/40 focus:ring-2 focus:ring-indigo-500/10 disabled:opacity-50"
                 />
 
@@ -1338,13 +1561,46 @@ function UndoRedoDemo({
 
                 <input
                   type="checkbox"
-                  checked={draftActive}
                   disabled={pending}
-                  onChange={(event) =>
-                    setDraftActive(
-                      event.target.checked,
-                    )
+                  checked={
+                    approach === 'snapshot' && localEditor
+                      ? currentLocalItem(localEditor.history).active
+                      : draftActive
                   }
+                  onChange={(event) => {
+                    const checked = event.target.checked
+
+                    if (approach === 'snapshot') {
+                      setLocalEditor((previous) => {
+                        if (!previous) {
+                          return previous
+                        }
+
+                        const committed =
+                          commitPendingName(previous)
+
+                        const current =
+                          currentLocalItem(committed.history)
+
+                        const nextHistory = recordLocalItemChange(
+                          committed.history,
+                          {
+                            ...current,
+                            active: checked,
+                          },
+                          'Toggle Active',
+                          sameConfigItem,
+                        )
+
+                        return {
+                          ...committed,
+                          history: nextHistory,
+                        }
+                      })
+                    } else {
+                      setDraftActive(checked)
+                    }
+                  }}
                   className="h-4 w-4 cursor-pointer rounded border-slate-700 bg-slate-900 accent-indigo-500"
                 />
               </label>
@@ -1354,6 +1610,98 @@ function UndoRedoDemo({
                 history are unchanged while
                 this editor is open.
               </div>
+
+              {approach === 'snapshot' && localEditor && (
+                <div className="space-y-3 rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs font-semibold text-slate-300">
+                      Local Snapshot History
+                    </span>
+
+                    <select
+                      aria-label="Maximum local history entries"
+                      value={localHistoryLimit}
+                      disabled={pending}
+                      onChange={(event) => {
+                        const limit = Number(
+                          event.target.value,
+                        ) as 10 | 25 | 50
+
+                        setLocalHistoryLimit(limit)
+
+                        setLocalEditor((previous) =>
+                          previous
+                            ? {
+                                ...previous,
+                                history: resizeLocalItemHistory(
+                                  previous.history,
+                                  limit,
+                                ),
+                              }
+                            : previous,
+                        )
+                      }}
+                      className="rounded-md border border-white/10 bg-slate-900 px-2 py-1 text-xs text-slate-200"
+                    >
+                      <option value={10}>10 steps</option>
+                      <option value={25}>25 steps</option>
+                      <option value={50}>50 steps</option>
+                    </select>
+                  </div>
+
+                  <p className="text-xs text-slate-500">
+                    Saved transitions:{' '}
+                    {localEditor.history.actions.length}
+                    {' / '}
+                    {localHistoryLimit}
+                    {' · '}
+                    Undo: {localEditor.history.cursor}
+                    {' · '}
+                    Redo: {
+                      localEditor.history.actions.length -
+                      localEditor.history.cursor
+                    }
+                  </p>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={undoLocalEditor}
+                      disabled={
+                        pending ||
+                        (
+                          localEditor.history.cursor === 0 &&
+                          localEditor.nameInput ===
+                            currentLocalItem(localEditor.history).name
+                        )
+                      }
+                      className={buttonAccent}
+                    >
+                      Undo Local
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={redoLocalEditor}
+                      disabled={
+                        pending ||
+                        localEditor.history.cursor >=
+                          localEditor.history.actions.length ||
+                        localEditor.nameInput !==
+                          currentLocalItem(localEditor.history).name
+                      }
+                      className={buttonNeutral}
+                    >
+                      Redo Local
+                    </button>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500">
+                    History is discarded when the editor closes.
+                    Older entries are removed when the limit is reached.
+                  </p>
+                </div>
+              )}
 
               <div className="mt-auto flex justify-end gap-2 border-t border-white/10 pt-4">
                 <button

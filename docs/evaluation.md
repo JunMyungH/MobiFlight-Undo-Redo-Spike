@@ -604,7 +604,95 @@ This keeps Project Undo aligned with meaningful user actions rather than individ
 
 ---
 
-## 10. Remaining Questions for Production Integration
+## 10. Benchmark Using Real MobiFlight Configuration Items
+
+### Benchmark Setup
+
+A .NET benchmark was implemented to compare the execution time and memory usage of three Undo/Redo approaches:
+
+- Command: Stores only the information required to reverse and reapply an action.
+- Item Snapshot: Stores a copy of the affected ConfigItem.
+- Full Snapshot: Stores a copy of the entire ConfigItem collection.
+
+The benchmark used 14 real MobiFlight ConfigItems as templates to generate datasets containing 25, 100, and 500 items.
+
+For each dataset, 100 Toggle Active operations were executed, followed by 100 Undo and 100 Redo operations.
+
+The measurements included execution time, memory allocated during the execution phase, and an approximation of retained memory.
+
+### Benchmark Results
+
+The following table presents the results for the dataset containing 500 ConfigItems, with 100 operations performed in each phase.
+
+| Measured Metric | Command | Item Snapshot | Full Snapshot |
+|---|---|---|---|
+| Execute (100 operations) | 0.023 ms | 0.075 ms | 75.345 ms |
+| Undo (100 operations) | 0.007 ms | 0.119 ms | 134.444 ms |
+| Redo (100 operations) | 0.002 ms | 0.091 ms | 155.968 ms |
+| Memory allocated during Execute | 3 kB | 77 kB | 37,557 kB |
+| Estimated retained memory after Execute | 5.5 kB | 126.9 kB | 25,807 kB |
+
+Across 100 Toggle Active operations, Command and Item Snapshot demonstrated considerably lower execution and memory allocation costs than Full Snapshot.
+
+For the 500-item dataset, Full Snapshot was approximately 1,005 times slower than Item Snapshot during the execution phase and allocated approximately 485 times more memory.
+
+However, the total execution time of 75.345 ms represents 100 consecutive operations. This corresponds to an average of approximately 0.75 ms per operation, which may not result in a noticeable delay for users.
+
+Memory consumption is potentially more significant. Full Snapshot copies the entire collection even when only a single ConfigItem is modified.
+
+Consequently, executing 100 individual changes in a collection of 500 ConfigItems results in approximately 50,000 ConfigItem copies being created during the execution phase alone.
+
+The reported retained memory values are approximate measurements based on garbage collection and should not be interpreted as exact memory footprints of the history entries.
+
+Furthermore, these results were obtained from a single benchmark run and should be treated as preliminary rather than statistically conclusive.
+
+### Relevance to the Current Implementation Scope
+
+Although the benchmark demonstrates the scalability differences between the approaches, the larger datasets do not directly represent the current implementation target.
+
+The current goal is to implement Undo/Redo within an individual ConfigItem editor, rather than project-wide or global Undo/Redo.
+
+Each editor is expected to maintain a temporary history of changes made to its associated ConfigItem. When the user applies or cancels the changes and closes the editor, the temporary history can be discarded.
+
+Therefore, copying hundreds of ConfigItems for every editing operation would not be necessary for the current scope.
+
+The evaluation should instead focus on the performance and correctness of Command and Item Snapshot when handling individual ConfigItems, including their nested configuration data.
+
+### Maximum History Depth
+
+An additional consideration for Snapshot-based Undo/Redo is the maximum number of history entries retained during an editing session.
+
+Even when only one ConfigItem is involved, storing a new snapshot after every meaningful change may increase memory usage as the history grows.
+
+Therefore, a maximum history depth should be defined to prevent unbounded memory consumption.
+
+For the next evaluation, history limits of 10, 25, and 50 entries can be used as experimental scenarios. These values are not proposed as final product limits.
+
+The evaluation should examine:
+
+- Memory consumption at different history depths.
+- The performance of Undo and Redo with bounded history.
+- The behavior when the maximum history capacity is reached.
+- Whether the oldest history entries can be discarded without affecting the remaining Undo/Redo operations.
+- Whether the history is correctly discarded when the editor is closed.
+
+The final history limit should balance practical editing needs, memory consumption, and implementation simplicity.
+
+### Conclusion and Future Considerations
+
+The benchmark confirms that Command and Item Snapshot have significantly lower memory allocation costs than Full Snapshot for localized configuration changes.
+
+However, the results do not establish a final production architecture.
+
+For the current ConfigItem-level Undo/Redo scope, implementation simplicity, correctness, maintainability, and bounded history storage should take priority over large-scale performance optimization.
+
+Future consideration: If MobiFlight introduces project-wide or global Undo/Redo, the larger-scale benchmark results may become more relevant.
+
+Such an extension would require further evaluation of memory consumption, history lifetime, object reference identity, side effects, and synchronization between the project state and running configurations.
+
+---
+
+## 11. Remaining Questions for Production Integration
 
 The main architectural spike is complete. The following topics still require product-level decisions in MobiFlight:
 
