@@ -733,6 +733,36 @@ Remaining considerations:
 
 These findings support further consideration of Item Snapshot as a practical approach for ConfigItem editor Undo/Redo, subject to final architectural review.
 
+### Snapshot Restoration and Deep-Clone Verification
+
+To further validate the suitability of Item Snapshot for editor-local Undo/Redo, additional tests were implemented using actual MobiFlight InputConfigItem and OutputConfigItem objects.
+
+The tests focused on three aspects:
+
+1. Persisted data integrity: Verify that cloning preserves the configuration data of all 14 ConfigItems loaded from the test fixture.
+2. Nested configuration restoration: Modify multiple nested settings, then verify that Undo and Redo restore the expected configuration states.
+3. Reference independence: Verify that modifications to the editing draft do not affect the original ConfigItem or previously stored snapshots.
+
+Configuration states were compared using MobiFlight's ConfigFile.ToJson() serialization and structural JSON equality checks.
+
+| Test | Result |
+|---|---|
+| Clone preserves persisted configuration data | Passed |
+| OutputConfigItem nested Undo/Redo restoration | Passed |
+| InputConfigItem nested Undo/Redo restoration | Passed |
+
+All three tests passed.
+
+The results provide additional evidence that Item Snapshot can restore representative nested ConfigItem settings correctly without requiring individual inverse operations for each modified property.
+
+Combined with the bounded-history benchmarks and successful frontend tests, these findings support Item Snapshot as a promising approach for editor-local Undo/Redo.
+
+Limitations: The tests do not cover every possible configuration subtype or all nested mutable objects. They also do not verify the restoration of live execution state, external side effects, or runtime caches.
+
+The distinction between persistent configuration data and runtime state must therefore be considered during production integration.
+
+Evaluation status: The technical spike is ready for architecture and scope review. Final implementation decisions remain subject to Sebastian's feedback.
+
 ### Conclusion and Future Considerations
 
 The benchmark confirms that Command and Item Snapshot have significantly lower memory allocation costs than Full Snapshot for localized configuration changes.
